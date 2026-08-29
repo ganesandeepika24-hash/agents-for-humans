@@ -89,10 +89,18 @@ class EmailPayload(BaseModel):
     body: str
 
 
-class Action(BaseModel):
-    type: Literal["email", "action_url"]
-    email_payload: EmailPayload | None
-    action_url: str | None
+class CardOptionType(str, Enum):
+    EMAIL = "email"
+    ACTION_URL = "action_url"
+    REMIND_LATER = "remind_later"
+    DISMISS = "dismiss"
+
+
+class CardOption(BaseModel):
+    label: str
+    option_type: CardOptionType
+    email_payload: EmailPayload | None = None
+    action_url: str | None = None
 
 
 class StageApprovalCardInput(BaseModel):
@@ -102,9 +110,7 @@ class StageApprovalCardInput(BaseModel):
     title: str
     summary: str
     computed_savings_gbp: float | None
-    action_type: Literal["email", "action_url"]
-    email_payload: EmailPayload | None
-    action_url: str | None
+    options: list[CardOption]
 
 
 class ApprovalCard(BaseModel):
@@ -115,8 +121,15 @@ class ApprovalCard(BaseModel):
     title: str
     summary: str
     computed_savings_gbp: float | None
-    action: Action
+    options: list[CardOption]
     status: Literal["pending", "approved", "rejected"]
+
+
+class TrialReminderState(BaseModel):
+    user_id: str
+    service: str
+    resolved: bool = False
+    last_tier_shown: str | None = None
 
 
 # ---------------------------------------------------------------------------
