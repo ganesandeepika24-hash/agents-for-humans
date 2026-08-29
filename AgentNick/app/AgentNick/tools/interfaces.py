@@ -38,10 +38,19 @@ class EvaluateTariffInput(BaseModel):
     signal: FinancialSignal  # must have source_type == "tariff"
 
 
+class TariffOutcome(str, Enum):
+    PRICE_DROP = "price_drop"
+    SAME_PRICE_RENEWAL = "same_price_renewal"
+    PRICE_HIKE_NO_BETTER_OFFER = "price_hike_no_better_offer"
+    SWITCH_RECOMMENDED = "switch_recommended"
+
+
 class TariffEvaluation(BaseModel):
+    outcome: TariffOutcome
     should_switch: bool
     best_offer: dict | None
     parity_matched: bool
+    annual_price_change_gbp: float
     net_savings_12mo_gbp: float
     reasoning_summary: str
 
