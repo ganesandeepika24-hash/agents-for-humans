@@ -94,6 +94,8 @@ class CardOptionType(str, Enum):
     ACTION_URL = "action_url"
     REMIND_LATER = "remind_later"
     DISMISS = "dismiss"
+    REVEAL_WARNING = "reveal_warning"
+    REVEAL_COMPARISON = "reveal_comparison"
 
 
 class CardOption(BaseModel):
