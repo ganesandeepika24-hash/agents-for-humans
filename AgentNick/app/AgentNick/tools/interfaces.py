@@ -166,6 +166,34 @@ class CardPromoEvaluation(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Tool 2c: evaluate_payment_reminder
+# ---------------------------------------------------------------------------
+
+class EvaluatePaymentReminderInput(BaseModel):
+    signal: FinancialSignal  # must have source_type == "card_promo"
+
+
+class PaymentReminderOutcome(str, Enum):
+    DIRECT_DEBIT_ACTIVE = "direct_debit_active"
+    NOT_YET_DUE = "not_yet_due"
+    ALREADY_MARKED_PAID = "already_marked_paid"
+    PAYMENT_REMINDER = "payment_reminder"
+
+
+class PaymentReminderEvaluation(BaseModel):
+    outcome: PaymentReminderOutcome
+    next_payment_due_date: str | None
+    days_until_due: int | None
+    reasoning_summary: str
+
+
+class PaymentReminderState(BaseModel):
+    user_id: str
+    card_provider: str
+    due_date_marked_paid: str | None = None  # the specific due_date already confirmed paid, if any
+
+
+# ---------------------------------------------------------------------------
 # Threshold system (used by evaluators before deciding whether to call
 # stage_approval_card — NOT stored on the ApprovalCard itself)
 # ---------------------------------------------------------------------------
