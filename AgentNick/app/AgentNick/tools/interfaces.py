@@ -133,6 +133,35 @@ class TrialReminderState(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Tool 2b: evaluate_card_promo
+# ---------------------------------------------------------------------------
+
+class EvaluateCardPromoInput(BaseModel):
+    signal: FinancialSignal  # must have source_type == "card_promo"
+
+
+class CardPromoOutcome(str, Enum):
+    ALREADY_PAID_OFF = "already_paid_off"
+    PROMO_ALREADY_LOST = "promo_already_lost"
+    ACTIVE_PROMO = "active_promo"
+
+
+class CardPromoEvaluation(BaseModel):
+    outcome: CardPromoOutcome
+    days_until_promo_ends: int | None
+    current_balance_gbp: float
+    standard_apr_pct: float | None
+    payment_method: Literal["direct_debit", "manual"]
+    do_nothing_total_interest_gbp: float | None   # 12-month simulation at standard APR
+    do_nothing_ending_balance_gbp: float | None
+    transfer_fee_gbp: float | None
+    transfer_net_benefit_gbp: float | None         # interest saved minus transfer fee
+    balance_stagnant_warning: bool                 # true if balance barely reduces / grows under do-nothing
+    best_transfer_offer: dict | None
+    reasoning_summary: str
+
+
+# ---------------------------------------------------------------------------
 # Threshold system (used by evaluators before deciding whether to call
 # stage_approval_card — NOT stored on the ApprovalCard itself)
 # ---------------------------------------------------------------------------

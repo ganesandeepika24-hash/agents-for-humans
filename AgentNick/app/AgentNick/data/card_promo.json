@@ -4,8 +4,8 @@
   "promo_apr_start_date": "2025-09-25",
   "promo_apr_end_date": "2026-09-25",
   "standard_apr_pct": 24.9,
-  "current_balance_gbp": 1200.00,
-  "minimum_payment_gbp": 35.00,
+  "current_balance_gbp": 1200.0,
+  "minimum_payment_gbp": 35.0,
   "balance_transfer_offers": [
     {
       "provider": "RivalBank",
@@ -13,5 +13,9 @@
       "promo_duration_months": 18,
       "transfer_fee_pct": 3.0
     }
-  ]
+  ],
+  "missed_payment_count": 0,
+  "promo_rate_still_active": true,
+  "payment_method": "manual",
+  "next_payment_due_date": "2026-09-05"
 }
