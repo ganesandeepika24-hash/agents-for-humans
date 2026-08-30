@@ -111,6 +111,7 @@ class StageApprovalCardInput(BaseModel):
     summary: str
     computed_savings_gbp: float | None
     options: list[CardOption]
+    extra_data: dict | None = None
 
 
 class ApprovalCard(BaseModel):
@@ -123,6 +124,7 @@ class ApprovalCard(BaseModel):
     computed_savings_gbp: float | None
     options: list[CardOption]
     status: Literal["pending", "approved", "rejected"]
+    extra_data: dict | None = None
 
 
 class TrialReminderState(BaseModel):

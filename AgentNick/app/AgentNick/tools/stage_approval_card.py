@@ -4,7 +4,7 @@ Tool: stage_approval_card
 Generic assembler — takes fully-decided fields and packages them into the
 ApprovalCard shape from docs/approval_card_contract.md. Contains no
 scenario-specific judgment; that logic lives in per-scenario wrapper
-functions like stage_tariff_card, stage_trial_card, etc.
+functions like stage_tariff_card, stage_trial_card, stage_card_promo_card.
 """
 
 from uuid import uuid4
@@ -33,4 +33,5 @@ def stage_approval_card(input: StageApprovalCardInput) -> ApprovalCard:
         computed_savings_gbp=input.computed_savings_gbp,
         options=input.options,
         status="pending",
+        extra_data=input.extra_data,
     )
