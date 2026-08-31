@@ -47,6 +47,11 @@ def has_been_notified(user_id: str, signal_id: str) -> bool:
 
 
 def record_notification(user_id: str, signal_id: str, card: dict):
+    """Insert if new. If this signal was already resolved, leave it
+    resolved -- a fresh check finding the same underlying commitment
+    again is not grounds to resurface something the user already
+    explicitly decided on. Only updates card_json for entries still
+    genuinely pending (fresher numbers on an unresolved item)."""
     conn = _get_connection()
     try:
         conn.execute(
@@ -55,6 +60,7 @@ def record_notification(user_id: str, signal_id: str, card: dict):
             VALUES (?, ?, ?, ?, 'pending')
             ON CONFLICT(user_id, signal_id) DO UPDATE SET
                 card_json = excluded.card_json
+            WHERE notified_signals.status != 'resolved'
             """,
             (user_id, signal_id, json.dumps(card), datetime.utcnow().isoformat()),
         )
