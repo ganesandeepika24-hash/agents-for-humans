@@ -1,15 +1,11 @@
 """
 scheduler.py
 
-Runs /check-equivalent logic on a timer, across all known scenario
-types, without any user action. Uses signal_state (via the deployed
-agent's own SQLite state, queried through a lightweight local check)
-to avoid re-notifying about cards already sent. Sends a digest email
-via Resend for any newly-found cards.
-
-This is the real "proactive" mechanism: the user never has to open the
-dashboard or click a button for AgentNick to notice something and
-reach them.
+Runs /check-equivalent logic on a timer, across all registered users
+and all known scenario types, without any user action. Uses cards.py
+(persistent, per-user) to avoid re-notifying about signals already
+surfaced. Sends a digest email + push per user for any newly-found
+cards belonging to them.
 """
 
 import json
@@ -19,7 +15,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
-from push_notifications import send_push_to_all
+from push_notifications import send_push_to_user
+from users import list_all_user_ids
+from cards import has_been_notified, record_notification
 
 DATA_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
 _SCENARIO_FILES = {
@@ -28,43 +26,46 @@ _SCENARIO_FILES = {
     "card_promo": "card_promo.json",
 }
 
-# Simple local record of card_ids we've already notified about this run,
-# so a digest isn't re-sent every single scheduler tick for the same card.
-_notified_card_ids = set()
-
 
 def run_scheduled_check():
-    print("[scheduler] Running scheduled check across all scenarios...")
-    new_cards = []
+    print("[scheduler] Running scheduled check across all users and scenarios...")
+    user_ids = list_all_user_ids()
 
-    for scenario_type, filename in _SCENARIO_FILES.items():
-        data_path = DATA_DIR / filename
-        with open(data_path) as f:
-            raw_data = json.load(f)
+    if not user_ids:
+        print("[scheduler] No registered users yet, skipping.")
+        return
 
-        try:
-            result = invoke_agent_for_check(
-                scenario_type=scenario_type,
-                raw_data=raw_data,
-                as_of_date="2026-08-30",
-            )
-        except Exception as e:
-            print(f"[scheduler] Error checking {scenario_type}: {e}")
-            continue
+    for user_id in user_ids:
+        new_cards = []
 
-        for card in result.get("cards", []):
-            card_id = card.get("card_id")
-            if card_id and card_id not in _notified_card_ids:
-                new_cards.append(card)
-                _notified_card_ids.add(card_id)
+        for scenario_type, filename in _SCENARIO_FILES.items():
+            data_path = DATA_DIR / filename
+            with open(data_path) as f:
+                raw_data = json.load(f)
 
-    if new_cards:
-        _send_digest(new_cards)
-    else:
-        print("[scheduler] No new cards found this run.")
+            try:
+                result = invoke_agent_for_check(
+                    scenario_type=scenario_type,
+                    raw_data=raw_data,
+                    as_of_date="2026-08-30",
+                )
+            except Exception as e:
+                print(f"[scheduler] Error checking {scenario_type} for {user_id}: {e}")
+                continue
+
+            for card in result.get("cards", []):
+                signal_id = card.get("signal_id")
+                if signal_id and not has_been_notified(user_id, signal_id):
+                    new_cards.append(card)
+                    record_notification(user_id, signal_id, card)
+
+        if new_cards:
+            _send_digest(user_id, new_cards)
+        else:
+            print(f"[scheduler] No new cards for user {user_id} this run.")
 
 
-def _send_digest(cards: list[dict]):
+def _send_digest(user_id: str, cards: list[dict]):
     lines = [f"AgentNick found {len(cards)} thing(s) that need your attention:\n"]
     for card in cards:
         savings = card.get("computed_savings_gbp")
@@ -78,9 +79,10 @@ def _send_digest(cards: list[dict]):
         subject=f"AgentNick: {len(cards)} update(s) need your attention",
         body=body,
     )
-    print(f"[scheduler] Digest email sent: {result.get('id')}")
+    print(f"[scheduler] Digest email sent for user {user_id}: {result.get('id')}")
 
-    send_push_to_all(
+    send_push_to_user(
+        user_id,
         title=f"AgentNick: {len(cards)} update(s)",
         body=cards[0]["title"] if len(cards) == 1 else f"{len(cards)} things need your attention",
         url="/static/index.html",

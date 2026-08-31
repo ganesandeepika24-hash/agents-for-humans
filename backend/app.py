@@ -1,20 +1,23 @@
 """
 AgentNick backend — FastAPI app.
 
-POST /check   -- runs a real evaluation against the deployed agent for
-                 a given scenario, returns any staged cards.
-POST /approve -- executes the chosen action for a card option (sends
-                 an email via Resend, or acknowledges a link/dismiss
-                 option). Built in the next step.
+POST /login    -- email-based session (no OAuth, no password; see README)
+POST /check    -- runs a real evaluation for a scenario, for the
+                   logged-in user; records any cards in the persistent
+                   per-user store.
+POST /approve  -- executes the chosen action for a card option; marks
+                   the underlying signal resolved on success.
+POST /subscribe -- registers a push subscription for the logged-in user.
 """
 
 import json
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -22,15 +25,15 @@ from pydantic import BaseModel
 from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
 from scheduler import start_scheduler
-from push_notifications import add_subscription, send_push_to_all
-import os
+from push_notifications import add_subscription, send_push_to_user
+from users import login as do_login, get_user_id_from_token
+from cards import record_notification, mark_resolved, get_pending_cards_for_user
 
 app = FastAPI(title="AgentNick Backend")
 
-# Allow the Lovable frontend (any origin, for hackathon simplicity) to call this API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # TODO: scope to the real frontend origin once finalized
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -38,7 +41,6 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 DATA_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
-
 _SCENARIO_FILES = {
     "tariff": "tariffs.json",
     "trial": "trial.json",
@@ -46,9 +48,16 @@ _SCENARIO_FILES = {
 }
 
 
-class CheckRequest(BaseModel):
-    scenario_type: str
-    as_of_date: str = "2026-08-30"
+def require_user(authorization: str | None = Header(default=None)) -> str:
+    """Extracts and validates a session token from the Authorization header
+    (expected format: "Bearer <token>"). Raises 401 if missing/invalid."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+    token = authorization[len("Bearer "):]
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid or expired session token")
+    return user_id
 
 
 _scheduler = None
@@ -64,24 +73,37 @@ def root():
     return {"status": "AgentNick backend running"}
 
 
+class LoginRequest(BaseModel):
+    email: str
+
+
+@app.post("/login")
+def login(req: LoginRequest):
+    if "@" not in req.email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    result = do_login(req.email)
+    return result
+
+
 @app.get("/vapid-public-key")
 def vapid_public_key():
     return {"key": os.environ.get("VAPID_PUBLIC_KEY", "")}
 
 
 @app.post("/subscribe")
-def subscribe(subscription: dict):
-    add_subscription(subscription)
+def subscribe(subscription: dict, user_id: str = Depends(require_user)):
+    add_subscription(user_id, subscription)
     return {"status": "subscribed"}
 
 
 @app.post("/test-push")
-def test_push():
-    send_push_to_all(title="AgentNick Test", body="This is a real push notification!")
+def test_push(user_id: str = Depends(require_user)):
+    send_push_to_user(user_id, title="AgentNick Test", body="This is a real push notification!")
     return {"status": "push_sent"}
 
 
 class ApproveRequest(BaseModel):
+    signal_id: str
     option_label: str
     option_type: str
     email_to: str | None = None
@@ -91,28 +113,40 @@ class ApproveRequest(BaseModel):
 
 
 @app.post("/approve")
-def approve(req: ApproveRequest):
+def approve(req: ApproveRequest, user_id: str = Depends(require_user)):
     if req.option_type == "email":
         if not req.email_to or not req.email_body:
             raise HTTPException(status_code=400, detail="email_to and email_body required for email options")
-        result = send_action_email(
-            to=req.email_to,
-            subject=req.email_subject or "Action requested",
-            body=req.email_body,
-        )
-        return {"status": "email_sent", "resend_id": result.get("id")}
+        # mailto: link returned instead of sending "as" the user -- see
+        # README for why (real providers are unlikely to honor a
+        # cancellation email that didn't come from the customer's own
+        # verified address).
+        mailto = f"mailto:{req.email_to}?subject={req.email_subject or ''}&body={req.email_body}"
+        mark_resolved(user_id, req.signal_id)
+        return {"status": "draft_ready", "mailto_url": mailto}
 
     if req.option_type == "action_url":
+        # External action the agent can't complete itself -- acknowledged,
+        # not resolved, since the user still has to go complete it.
         return {"status": "acknowledged", "action_url": req.action_url}
 
-    if req.option_type in ("dismiss", "remind_later", "reveal_warning", "reveal_comparison"):
+    if req.option_type in ("dismiss", "remind_later"):
+        mark_resolved(user_id, req.signal_id)
+        return {"status": "acknowledged", "option_type": req.option_type}
+
+    if req.option_type in ("reveal_warning", "reveal_comparison"):
         return {"status": "acknowledged", "option_type": req.option_type}
 
     raise HTTPException(status_code=400, detail=f"Unknown option_type: {req.option_type}")
 
 
+class CheckRequest(BaseModel):
+    scenario_type: str
+    as_of_date: str = "2026-08-30"
+
+
 @app.post("/check")
-def check(req: CheckRequest):
+def check(req: CheckRequest, user_id: str = Depends(require_user)):
     if req.scenario_type not in _SCENARIO_FILES:
         raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {req.scenario_type}")
 
@@ -126,4 +160,16 @@ def check(req: CheckRequest):
         as_of_date=req.as_of_date,
     )
 
+    for card in result.get("cards", []):
+        signal_id = card.get("signal_id")
+        if signal_id:
+            record_notification(user_id, signal_id, card)
+
     return {"cards": result["cards"], "summary_text": result["full_text"]}
+
+
+@app.get("/pending-cards")
+def pending_cards(user_id: str = Depends(require_user)):
+    """Returns previously-found cards still awaiting user action, without
+    re-invoking the agent -- useful for a fast initial page load."""
+    return {"cards": get_pending_cards_for_user(user_id)}
