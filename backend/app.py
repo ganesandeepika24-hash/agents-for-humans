@@ -16,11 +16,14 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
 from scheduler import start_scheduler
+from push_notifications import add_subscription, send_push_to_all
+import os
 
 app = FastAPI(title="AgentNick Backend")
 
@@ -31,6 +34,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 DATA_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
 
@@ -57,6 +62,23 @@ def on_startup():
 @app.get("/")
 def root():
     return {"status": "AgentNick backend running"}
+
+
+@app.get("/vapid-public-key")
+def vapid_public_key():
+    return {"key": os.environ.get("VAPID_PUBLIC_KEY", "")}
+
+
+@app.post("/subscribe")
+def subscribe(subscription: dict):
+    add_subscription(subscription)
+    return {"status": "subscribed"}
+
+
+@app.post("/test-push")
+def test_push():
+    send_push_to_all(title="AgentNick Test", body="This is a real push notification!")
+    return {"status": "push_sent"}
 
 
 class ApproveRequest(BaseModel):

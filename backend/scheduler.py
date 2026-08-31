@@ -19,6 +19,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
+from push_notifications import send_push_to_all
 
 DATA_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
 _SCENARIO_FILES = {
@@ -77,7 +78,13 @@ def _send_digest(cards: list[dict]):
         subject=f"AgentNick: {len(cards)} update(s) need your attention",
         body=body,
     )
-    print(f"[scheduler] Digest sent: {result.get('id')}")
+    print(f"[scheduler] Digest email sent: {result.get('id')}")
+
+    send_push_to_all(
+        title=f"AgentNick: {len(cards)} update(s)",
+        body=cards[0]["title"] if len(cards) == 1 else f"{len(cards)} things need your attention",
+        url="/static/index.html",
+    )
 
 
 def start_scheduler():
