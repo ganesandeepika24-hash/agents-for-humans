@@ -28,6 +28,7 @@ from scheduler import start_scheduler
 from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user
+from user_settings import get_threshold, set_threshold
 
 app = FastAPI(title="AgentNick Backend")
 
@@ -154,10 +155,13 @@ def check(req: CheckRequest, user_id: str = Depends(require_user)):
     with open(data_path) as f:
         raw_data = json.load(f)
 
+    user_threshold = get_threshold(user_id)
     result = invoke_agent_for_check(
         scenario_type=req.scenario_type,
         raw_data=raw_data,
         as_of_date=req.as_of_date,
+        threshold_min_gbp=user_threshold.get("min_gbp"),
+        threshold_min_pct=user_threshold.get("min_pct"),
     )
 
     for card in result.get("cards", []):
@@ -173,3 +177,19 @@ def pending_cards(user_id: str = Depends(require_user)):
     """Returns previously-found cards still awaiting user action, without
     re-invoking the agent -- useful for a fast initial page load."""
     return {"cards": get_pending_cards_for_user(user_id)}
+
+
+class ThresholdRequest(BaseModel):
+    min_gbp: float | None = None
+    min_pct: float | None = None
+
+
+@app.get("/settings/threshold")
+def get_threshold_endpoint(user_id: str = Depends(require_user)):
+    return get_threshold(user_id)
+
+
+@app.post("/settings/threshold")
+def set_threshold_endpoint(req: ThresholdRequest, user_id: str = Depends(require_user)):
+    set_threshold(user_id, req.min_gbp, req.min_pct)
+    return {"status": "saved", **get_threshold(user_id)}
