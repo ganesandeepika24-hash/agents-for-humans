@@ -15,6 +15,7 @@ from tools.check_savings_threshold import check_savings_threshold
 from tools.request_missing_data import request_missing_data
 from tools.stage_financial_card import stage_financial_card
 from tools.signal_state import get_signal_state, update_signal_state
+from tools.finalize_check import finalize_check
 
 app = BedrockAgentCoreApp()
 log = app.logger
@@ -154,6 +155,15 @@ decide.
 You never complete an action without the user's explicit approval via a
 staged card. Your job ends at presenting a clear, accurate recommendation
 with the right action attached — the user always makes the final call.
+
+## Ending an evaluation turn
+
+When you have finished evaluating a signal (whether you staged a card,
+requested missing data, or determined no action is needed), your LAST
+tool call before writing your final summary to the user must be
+finalize_check, passing the exact card object(s) you produced during
+this turn as its "cards" argument (an empty list if none). This is a
+required final step for every evaluation, not optional.
 """
 
 
@@ -168,6 +178,7 @@ tools = [
     stage_financial_card,
     get_signal_state,
     update_signal_state,
+    finalize_check,
 ]
 
 _INLINE_FUNCTION_NAMES = set()
