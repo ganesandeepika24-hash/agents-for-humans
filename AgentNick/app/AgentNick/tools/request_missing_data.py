@@ -2,41 +2,33 @@
 Tool: request_missing_data
 
 The FM calls this instead of guessing or fabricating a number when it
-doesn't have what it needs to make a confident recommendation for ANY
-scenario. Produces a card asking the user to provide the missing
-information manually or via document upload, rather than proceeding
-on an assumption.
+doesn't have what it needs to make a confident recommendation.
 """
 
 from strands import tool
 
-from .interfaces import (
-    ApprovalCard,
-    CardOption,
-    CardOptionType,
-    MissingDataRequest,
-    StageApprovalCardInput,
-)
+from .interfaces import ApprovalCard, CardOption, CardOptionType, StageApprovalCardInput
 from .stage_approval_card import stage_approval_card
 
 
 @tool
-def request_missing_data(input: MissingDataRequest, scenario_type: str) -> ApprovalCard:
-    missing_list = ", ".join(input.what_is_missing)
-    summary = f"I don't have: {missing_list}. {input.why_needed}"
+def request_missing_data(
+    scenario_type: str,
+    what_is_missing: list[str],
+    why_needed: str,
+    can_upload_document: bool = True,
+) -> ApprovalCard:
+    missing_list = ", ".join(what_is_missing)
+    summary = f"I don\'t have: {missing_list}. {why_needed}"
 
     options = [
-        CardOption(
-            label="Enter Manually",
-            option_type=CardOptionType.MANUAL_INPUT,
-            requested_fields=input.what_is_missing,
-        ),
+        CardOption(label="Enter Manually", option_type=CardOptionType.MANUAL_INPUT, requested_fields=what_is_missing),
     ]
-    if input.can_upload_document:
+    if can_upload_document:
         options.append(CardOption(
             label="Upload a Document",
             option_type=CardOptionType.DOCUMENT_UPLOAD,
-            requested_fields=input.what_is_missing,
+            requested_fields=what_is_missing,
         ))
 
     return stage_approval_card(StageApprovalCardInput(

@@ -1,21 +1,12 @@
 """
 Tool: simulate_balance_over_months
 
-Generic deterministic balance simulation — usable for ANY interest-
-bearing debt scenario (credit cards, loans, overdrafts), not just
-card_promo. The FM decides when a balance simulation is relevant;
-this tool guarantees the arithmetic is correct.
+Generic deterministic balance simulation for any interest-bearing debt
+scenario (credit cards, loans, overdrafts).
 """
 
 from pydantic import BaseModel
 from strands import tool
-
-
-class SimulateBalanceInput(BaseModel):
-    balance: float
-    annual_rate_pct: float
-    monthly_payment: float
-    months: int = 12
 
 
 class BalanceSimulationResult(BaseModel):
@@ -24,17 +15,20 @@ class BalanceSimulationResult(BaseModel):
 
 
 @tool
-def simulate_balance_over_months(input: SimulateBalanceInput) -> BalanceSimulationResult:
-    balance = input.balance
-    monthly_rate = input.annual_rate_pct / 100 / 12
+def simulate_balance_over_months(
+    balance: float,
+    annual_rate_pct: float,
+    monthly_payment: float,
+    months: int = 12,
+) -> BalanceSimulationResult:
     total_interest = 0.0
 
-    for _ in range(input.months):
+    for _ in range(months):
         if balance <= 0:
             break
-        interest = balance * monthly_rate
+        interest = balance * (annual_rate_pct / 100 / 12)
         total_interest += interest
-        balance = balance + interest - input.monthly_payment
+        balance = balance + interest - monthly_payment
         if balance < 0:
             balance = 0.0
 

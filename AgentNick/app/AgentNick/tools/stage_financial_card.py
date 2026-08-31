@@ -1,25 +1,55 @@
 """
 Tool: stage_financial_card
 
-Generic replacement for stage_tariff_card / stage_trial_card /
-stage_card_promo_card / stage_payment_reminder_card. The FM proposes the
-title, summary, savings figure, and options based on its own reasoning
-(guided by system prompt principles); stage_approval_card's existing
-validation still guards against malformed output (email needs a
-payload, action_url needs a URL).
-
-The FM is responsible for applying the threshold check (resolve_threshold
-/ meets_threshold) BEFORE calling this — the system prompt instructs it
-to do so. This tool does not gate on outcome type since there is no
-fixed outcome taxonomy anymore.
+Generic card-staging tool. Accepts options as a list of plain dicts
+(each with label, option_type, and optionally email_to/email_subject/
+email_body or action_url) rather than a nested Pydantic list, since
+flat/dict types are reliable with Strands tool-calling while nested
+BaseModel parameters are not.
 """
 
 from strands import tool
 
-from .interfaces import ApprovalCard, StageApprovalCardInput
+from .interfaces import (
+    ApprovalCard,
+    CardOption,
+    CardOptionType,
+    EmailPayload,
+    StageApprovalCardInput,
+)
 from .stage_approval_card import stage_approval_card
 
 
 @tool
-def stage_financial_card(input: StageApprovalCardInput) -> ApprovalCard:
-    return stage_approval_card(input)
+def stage_financial_card(
+    scenario_type: str,
+    title: str,
+    summary: str,
+    options: list[dict],
+    computed_savings_gbp: float | None = None,
+    extra_data: dict | None = None,
+) -> ApprovalCard:
+    parsed_options = []
+    for opt in options:
+        email_payload = None
+        if opt.get("email_to"):
+            email_payload = EmailPayload(
+                to=opt["email_to"],
+                subject=opt.get("email_subject", ""),
+                body=opt.get("email_body", ""),
+            )
+        parsed_options.append(CardOption(
+            label=opt["label"],
+            option_type=CardOptionType(opt["option_type"]),
+            email_payload=email_payload,
+            action_url=opt.get("action_url"),
+        ))
+
+    return stage_approval_card(StageApprovalCardInput(
+        scenario_type=scenario_type,
+        title=title,
+        summary=summary,
+        computed_savings_gbp=computed_savings_gbp,
+        options=parsed_options,
+        extra_data=extra_data,
+    ))

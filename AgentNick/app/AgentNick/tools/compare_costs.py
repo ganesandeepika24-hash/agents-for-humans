@@ -1,23 +1,24 @@
 """
 Tool: compare_costs
 
-Generic replacement for evaluate_tariff_parity's savings math and
-evaluate_card_promo's transfer-fee comparison. The FM calls this whenever
-it identifies two comparable costs (current vs. an alternative) for ANY
-scenario — broadband, subscriptions, insurance, gym memberships, card
-promos, anything. The FM decides WHAT to compare; this tool does the
-arithmetic reliably.
+Generic cost-comparison arithmetic tool. The FM decides WHAT to compare
+for any scenario; this tool guarantees the numbers are correct.
 """
 
 from strands import tool
 
-from .interfaces import CompareCostsInput, CostComparison
+from .interfaces import CostComparison
 
 
 @tool
-def compare_costs(input: CompareCostsInput) -> CostComparison:
-    total_current = input.current_monthly_cost * input.months
-    total_alternative = (input.alternative_monthly_cost * input.months) + input.one_time_fees
+def compare_costs(
+    current_monthly_cost: float,
+    alternative_monthly_cost: float,
+    one_time_fees: float = 0.0,
+    months: int = 12,
+) -> CostComparison:
+    total_current = current_monthly_cost * months
+    total_alternative = (alternative_monthly_cost * months) + one_time_fees
     net_savings = round(total_current - total_alternative, 2)
 
     return CostComparison(

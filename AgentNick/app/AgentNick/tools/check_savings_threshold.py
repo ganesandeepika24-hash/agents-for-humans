@@ -1,23 +1,15 @@
 """
 Tool: check_savings_threshold
 
-Makes the existing resolve_threshold/meets_threshold logic callable by
-the FM. Wraps both into one step: resolve which threshold config applies
-for this scenario (system default / user global / per-scenario override),
-then check whether the given amount clears it.
+Makes the resolve_threshold/meets_threshold logic callable by the FM.
+Simplified to flat parameters -- FM passes an optional override amount
+and/or percent directly, rather than a nested settings object.
 """
 
 from strands import tool
 from pydantic import BaseModel
 
-from .interfaces import UserThresholdSettings, meets_threshold, resolve_threshold
-
-
-class CheckThresholdInput(BaseModel):
-    scenario_type: str
-    amount_gbp: float
-    base_amount_gbp: float
-    user_settings: UserThresholdSettings | None = None
+from .interfaces import ThresholdConfig, ThresholdMode, meets_threshold
 
 
 class ThresholdCheckResult(BaseModel):
@@ -28,13 +20,28 @@ class ThresholdCheckResult(BaseModel):
 
 
 @tool
-def check_savings_threshold(input: CheckThresholdInput) -> ThresholdCheckResult:
-    resolved = resolve_threshold(input.scenario_type, input.user_settings)
-    result = meets_threshold(input.amount_gbp, input.base_amount_gbp, resolved.config)
+def check_savings_threshold(
+    amount_gbp: float,
+    base_amount_gbp: float,
+    user_min_gbp_override: float | None = None,
+    user_min_pct_override: float | None = None,
+) -> ThresholdCheckResult:
+    if user_min_gbp_override is not None or user_min_pct_override is not None:
+        config = ThresholdConfig(
+            mode=ThresholdMode.OR,
+            min_savings_gbp=user_min_gbp_override,
+            min_savings_pct=user_min_pct_override,
+        )
+        source = "user_override"
+    else:
+        config = ThresholdConfig(mode=ThresholdMode.OR, min_savings_gbp=15.0, min_savings_pct=10.0)
+        source = "system_default"
+
+    result = meets_threshold(amount_gbp, base_amount_gbp, config)
 
     return ThresholdCheckResult(
         meets_threshold=result,
-        threshold_source=resolved.source,
-        resolved_min_gbp=resolved.config.min_savings_gbp,
-        resolved_min_pct=resolved.config.min_savings_pct,
+        threshold_source=source,
+        resolved_min_gbp=config.min_savings_gbp,
+        resolved_min_pct=config.min_savings_pct,
     )
