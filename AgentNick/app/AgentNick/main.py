@@ -14,6 +14,7 @@ from tools.balance_simulator import simulate_balance_over_months
 from tools.check_savings_threshold import check_savings_threshold
 from tools.request_missing_data import request_missing_data
 from tools.stage_financial_card import stage_financial_card
+from tools.signal_state import get_signal_state, update_signal_state
 
 app = BedrockAgentCoreApp()
 log = app.logger
@@ -165,6 +166,8 @@ tools = [
     check_savings_threshold,
     request_missing_data,
     stage_financial_card,
+    get_signal_state,
+    update_signal_state,
 ]
 
 _INLINE_FUNCTION_NAMES = set()
