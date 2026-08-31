@@ -11,6 +11,7 @@ results is not reliable.
 """
 
 import json
+import uuid
 
 import boto3
 
@@ -32,6 +33,7 @@ standard process."""
 
     response = client.invoke_agent_runtime(
         agentRuntimeArn=RUNTIME_ARN,
+        runtimeSessionId=str(uuid.uuid4()),
         payload=json.dumps({"prompt": prompt}).encode("utf-8"),
     )
 
