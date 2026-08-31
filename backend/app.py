@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
+from scheduler import start_scheduler
 
 app = FastAPI(title="AgentNick Backend")
 
@@ -43,6 +44,14 @@ _SCENARIO_FILES = {
 class CheckRequest(BaseModel):
     scenario_type: str
     as_of_date: str = "2026-08-30"
+
+
+_scheduler = None
+
+@app.on_event("startup")
+def on_startup():
+    global _scheduler
+    _scheduler = start_scheduler()
 
 
 @app.get("/")
