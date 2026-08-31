@@ -3,29 +3,26 @@ import json
 
 from main import get_or_create_agent
 
-gym_raw = {
+incomplete_raw = {
     "user_id": "demo_user",
-    "provider": "FitZone Gym",
-    "current_monthly_price_gbp": 35.0,
-    "contract_end_date": "2026-09-20",
-    "renewal_monthly_price_gbp": 55.0,
-    "annual_membership_price_gbp": 480.0,
-    "competitor_options": [
-        {"provider": "PureGym", "monthly_price_gbp": 25.0, "signup_fee_gbp": 0.0},
-    ],
+    "card_provider": "ExampleBank",
+    "current_balance_gbp": 900.0,
+    "promo_apr_end_date": "2026-09-25",
+    # deliberately missing: standard_apr_pct
+    # deliberately missing: any comparable balance transfer offer
 }
 
 prompt = f"""I want you to check on this signal for me. Here is the raw data:
 
-source_type: "gym_membership"
-raw_data: {json.dumps(gym_raw)}
+source_type: "card_promo"
+raw_data: {json.dumps(incomplete_raw)}
 
 Today's date is 2026-08-30. Please evaluate this signal following your
 standard process.
 """
 
 async def main():
-    agent = get_or_create_agent("test-session-gym")
+    agent = get_or_create_agent("test-session-missing")
     async for event in agent.stream_async(prompt):
         if not isinstance(event, dict) or "event" not in event:
             continue

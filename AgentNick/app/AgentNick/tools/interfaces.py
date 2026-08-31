@@ -96,6 +96,8 @@ class CardOptionType(str, Enum):
     DISMISS = "dismiss"
     REVEAL_WARNING = "reveal_warning"
     REVEAL_COMPARISON = "reveal_comparison"
+    MANUAL_INPUT = "manual_input"
+    DOCUMENT_UPLOAD = "document_upload"
 
 
 class CardOption(BaseModel):
