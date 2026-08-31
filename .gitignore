@@ -12,3 +12,6 @@ node_modules/
 
 # OS
 .DS_Store
+
+# SQLite state (local/demo runtime data, not source)
+*.db
