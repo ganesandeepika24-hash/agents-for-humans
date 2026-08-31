@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from invoke_agent import invoke_agent_for_check
+from send_email import send_action_email
 
 app = FastAPI(title="AgentNick Backend")
 
@@ -47,6 +48,36 @@ class CheckRequest(BaseModel):
 @app.get("/")
 def root():
     return {"status": "AgentNick backend running"}
+
+
+class ApproveRequest(BaseModel):
+    option_label: str
+    option_type: str
+    email_to: str | None = None
+    email_subject: str | None = None
+    email_body: str | None = None
+    action_url: str | None = None
+
+
+@app.post("/approve")
+def approve(req: ApproveRequest):
+    if req.option_type == "email":
+        if not req.email_to or not req.email_body:
+            raise HTTPException(status_code=400, detail="email_to and email_body required for email options")
+        result = send_action_email(
+            to=req.email_to,
+            subject=req.email_subject or "Action requested",
+            body=req.email_body,
+        )
+        return {"status": "email_sent", "resend_id": result.get("id")}
+
+    if req.option_type == "action_url":
+        return {"status": "acknowledged", "action_url": req.action_url}
+
+    if req.option_type in ("dismiss", "remind_later", "reveal_warning", "reveal_comparison"):
+        return {"status": "acknowledged", "option_type": req.option_type}
+
+    raise HTTPException(status_code=400, detail=f"Unknown option_type: {req.option_type}")
 
 
 @app.post("/check")
