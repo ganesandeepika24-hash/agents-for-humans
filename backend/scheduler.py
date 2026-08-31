@@ -19,6 +19,24 @@ from push_notifications import send_push_to_user
 from users import list_all_user_ids
 from cards import has_been_notified, record_notification
 
+_paused = False
+
+
+def pause():
+    global _paused
+    _paused = True
+    print("[scheduler] Paused.")
+
+
+def resume():
+    global _paused
+    _paused = False
+    print("[scheduler] Resumed.")
+
+
+def is_paused() -> bool:
+    return _paused
+
 DATA_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
 _SCENARIO_FILES = {
     "tariff": "tariffs.json",
@@ -28,6 +46,10 @@ _SCENARIO_FILES = {
 
 
 def run_scheduled_check():
+    if _paused:
+        print("[scheduler] Skipped (paused).")
+        return
+
     print("[scheduler] Running scheduled check across all users and scenarios...")
     user_ids = list_all_user_ids()
 
@@ -91,7 +113,7 @@ def _send_digest(user_id: str, cards: list[dict]):
 
 def start_scheduler():
     scheduler = BackgroundScheduler()
-    scheduler.add_job(run_scheduled_check, "interval", minutes=2, id="agentnick_check")
+    scheduler.add_job(run_scheduled_check, "interval", minutes=30, id="agentnick_check")
     scheduler.start()
-    print("[scheduler] Started — checking every 2 minutes.")
+    print("[scheduler] Started — checking every 30 minutes.")
     return scheduler

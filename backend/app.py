@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
-from scheduler import start_scheduler
+from scheduler import start_scheduler, pause as pause_scheduler, resume as resume_scheduler, is_paused
 from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user
@@ -84,6 +84,23 @@ def login(req: LoginRequest):
         raise HTTPException(status_code=400, detail="Invalid email")
     result = do_login(req.email)
     return result
+
+
+@app.post("/scheduler/pause")
+def scheduler_pause():
+    pause_scheduler()
+    return {"status": "paused"}
+
+
+@app.post("/scheduler/resume")
+def scheduler_resume():
+    resume_scheduler()
+    return {"status": "resumed"}
+
+
+@app.get("/scheduler/status")
+def scheduler_status():
+    return {"paused": is_paused()}
 
 
 @app.get("/vapid-public-key")
