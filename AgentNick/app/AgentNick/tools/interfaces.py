@@ -17,12 +17,12 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 
 class ParseSignalsInput(BaseModel):
-    source_type: Literal["tariff", "trial", "card_promo"]
-    raw_data: dict  # contents of tariffs.json / trial.json / card_promo.json
+    source_type: str  # free-form: "tariff", "trial", "card_promo", "gym_membership", "insurance", anything
+    raw_data: dict
 
 
 class FinancialSignal(BaseModel):
-    source_type: Literal["tariff", "trial", "card_promo"]
+    source_type: str
     user_id: str
     key_date: date
     days_until_key_date: int
@@ -106,9 +106,7 @@ class CardOption(BaseModel):
 
 
 class StageApprovalCardInput(BaseModel):
-    scenario_type: Literal[
-        "trial_cancellation", "broadband_tariff", "card_promo", "hobby_registration"
-    ]
+    scenario_type: str  # free-form label describing the kind of signal, e.g. "broadband_tariff"
     title: str
     summary: str
     computed_savings_gbp: float | None
@@ -118,9 +116,7 @@ class StageApprovalCardInput(BaseModel):
 
 class ApprovalCard(BaseModel):
     card_id: str
-    scenario_type: Literal[
-        "trial_cancellation", "broadband_tariff", "card_promo", "hobby_registration"
-    ]
+    scenario_type: str
     title: str
     summary: str
     computed_savings_gbp: float | None
@@ -191,6 +187,30 @@ class PaymentReminderState(BaseModel):
     user_id: str
     card_provider: str
     due_date_marked_paid: str | None = None  # the specific due_date already confirmed paid, if any
+
+
+# ---------------------------------------------------------------------------
+# Generic financial reasoning tools (replace scenario-specific evaluators)
+# ---------------------------------------------------------------------------
+
+class CompareCostsInput(BaseModel):
+    current_monthly_cost: float
+    alternative_monthly_cost: float
+    one_time_fees: float = 0.0
+    months: int = 12
+
+
+class CostComparison(BaseModel):
+    total_current_cost: float
+    total_alternative_cost: float
+    net_savings: float
+    worth_switching: bool
+
+
+class MissingDataRequest(BaseModel):
+    what_is_missing: list[str]
+    why_needed: str
+    can_upload_document: bool = True
 
 
 # ---------------------------------------------------------------------------
