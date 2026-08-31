@@ -8,6 +8,7 @@ which holds the key monetary amount — this keeps the tool genuinely
 generic across any scenario, not just the three originally demoed.
 """
 
+import hashlib
 from datetime import date
 
 from strands import tool
@@ -49,10 +50,21 @@ def parse_financial_signals(
 
     key_date = date.fromisoformat(raw_data[key_date_field])
     days_until = (key_date - today).days
+    user_id = raw_data[user_id_field]
+
+    # Deterministic identity: same user + same scenario type + same key
+    # date -> same signal_id, always, regardless of when it's checked or
+    # what the monetary amount happens to be that day. This is what lets
+    # the backend recognize "I've already told this user about this
+    # specific commitment" and avoid repeat-notifying about an unchanged
+    # fact every time the scheduler runs.
+    fingerprint_source = f"{user_id}|{source_type}|{raw_data[key_date_field]}"
+    signal_id = hashlib.sha256(fingerprint_source.encode()).hexdigest()[:16]
 
     return FinancialSignal(
+        signal_id=signal_id,
         source_type=source_type,
-        user_id=raw_data[user_id_field],
+        user_id=user_id,
         key_date=key_date,
         days_until_key_date=days_until,
         monetary_amount_gbp=float(raw_data[monetary_field]),
