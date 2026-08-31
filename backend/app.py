@@ -46,6 +46,7 @@ _SCENARIO_FILES = {
     "tariff": "tariffs.json",
     "trial": "trial.json",
     "card_promo": "card_promo.json",
+    "card_promo_incomplete": "card_promo_incomplete.json",  # deliberately missing data, for testing request_missing_data
 }
 
 

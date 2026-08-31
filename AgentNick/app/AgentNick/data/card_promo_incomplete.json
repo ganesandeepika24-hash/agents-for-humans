@@ -1,0 +1,12 @@
+{
+  "user_id": "demo_user",
+  "card_provider": "ExampleBank",
+  "promo_apr_start_date": "2025-09-25",
+  "promo_apr_end_date": "2026-09-25",
+  "current_balance_gbp": 1200.0,
+  "minimum_payment_gbp": 35.0,
+  "missed_payment_count": 0,
+  "promo_rate_still_active": true,
+  "payment_method": "manual",
+  "next_payment_due_date": "2026-09-05"
+}
