@@ -22,6 +22,7 @@ class ParseSignalsInput(BaseModel):
 
 
 class FinancialSignal(BaseModel):
+    signal_id: str
     source_type: str
     user_id: str
     key_date: date
@@ -109,6 +110,7 @@ class CardOption(BaseModel):
 
 class StageApprovalCardInput(BaseModel):
     scenario_type: str  # free-form label describing the kind of signal, e.g. "broadband_tariff"
+    signal_id: str
     title: str
     summary: str
     computed_savings_gbp: float | None
@@ -118,6 +120,7 @@ class StageApprovalCardInput(BaseModel):
 
 class ApprovalCard(BaseModel):
     card_id: str
+    signal_id: str
     scenario_type: str
     title: str
     summary: str
