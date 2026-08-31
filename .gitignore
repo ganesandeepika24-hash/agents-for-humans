@@ -15,3 +15,7 @@ node_modules/
 
 # SQLite state (local/demo runtime data, not source)
 *.db
+
+# Secrets
+.env
+backend/.env
