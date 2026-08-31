@@ -26,21 +26,26 @@ def normalize_options(options: list[dict]) -> list[CardOption]:
         if raw_type not in _VALID_TYPES:
             raw_type = "dismiss"
 
+        # The FM sometimes nests the real payload under a generic
+        # "action_context" dict instead of flat keys -- check both.
+        context = opt.get("action_context", {}) if isinstance(opt.get("action_context"), dict) else {}
+
         email_payload = None
-        if opt.get("email_to"):
+        email_to = opt.get("email_to") or context.get("to")
+        if email_to:
             email_payload = EmailPayload(
-                to=opt["email_to"],
-                subject=opt.get("email_subject", ""),
-                body=opt.get("email_body", ""),
+                to=email_to,
+                subject=opt.get("email_subject") or context.get("subject", ""),
+                body=opt.get("email_body") or context.get("body", ""),
             )
 
         option_type = CardOptionType(raw_type)
 
-        # action_url may show up under "action_url" or, when the FM
-        # uses a "type"/"value" pair instead, under "value".
+        # action_url may show up under "action_url", "value" (when paired
+        # with a "type" key), or nested inside action_context.
         action_url = None
         if option_type == CardOptionType.ACTION_URL:
-            action_url = opt.get("action_url") or opt.get("value")
+            action_url = opt.get("action_url") or opt.get("value") or context.get("url")
 
         if option_type == CardOptionType.EMAIL and email_payload is None:
             option_type = CardOptionType.DISMISS

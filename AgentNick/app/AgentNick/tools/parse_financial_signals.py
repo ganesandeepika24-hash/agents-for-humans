@@ -2,10 +2,9 @@
 Tool: parse_financial_signals
 
 Normalizes ANY raw financial signal data into one common FinancialSignal
-shape. Rather than a hardcoded table of known field names per scenario
-type, the caller (the FM) specifies which field holds the key date and
-which holds the key monetary amount — this keeps the tool genuinely
-generic across any scenario, not just the three originally demoed.
+shape. The caller (the FM) specifies which fields hold the key date,
+the key monetary amount, and a stable identity field -- keeps the tool
+generic across any scenario.
 """
 
 import hashlib
@@ -22,43 +21,43 @@ def parse_financial_signals(
     raw_data: dict,
     key_date_field: str,
     monetary_field: str,
+    identity_field: str,
     user_id_field: str = "user_id",
     as_of_date: str | None = None,
 ) -> FinancialSignal:
     """
     Normalize a raw financial record into a FinancialSignal.
 
-    source_type: a short label for what kind of signal this is (e.g.
-        "tariff", "trial", "card_promo", or any other kind).
+    source_type: a short label for what kind of signal this is.
     raw_data: the raw dict of fields for this signal.
-    key_date_field: which key in raw_data holds the date that matters
-        (contract end, trial end, promo end, deadline, etc).
+    key_date_field: which key in raw_data holds the date that matters.
     monetary_field: which key in raw_data holds the amount at stake.
+    identity_field: which key in raw_data holds a STABLE business
+        identifier for this specific commitment -- e.g. "provider",
+        "service", "card_provider". Must NOT be a date or a monetary
+        amount, since those can legitimately change between checks.
+        This is what signal_id is built from, so choosing consistently
+        for the same commitment across repeated checks is essential --
+        do not pick different fields for the same kind of signal on
+        different calls.
     user_id_field: which key in raw_data holds the user identifier.
-        Defaults to "user_id".
-    as_of_date: ISO date string (YYYY-MM-DD) to treat as "today". Defaults
-        to the real current date if not given.
+    as_of_date: ISO date string (YYYY-MM-DD) to treat as "today".
     """
     today = date.fromisoformat(as_of_date) if as_of_date else date.today()
 
-    if key_date_field not in raw_data:
-        raise ValueError(f"Field '{key_date_field}' not found in raw_data")
-    if monetary_field not in raw_data:
-        raise ValueError(f"Field '{monetary_field}' not found in raw_data")
-    if user_id_field not in raw_data:
-        raise ValueError(f"Field '{user_id_field}' not found in raw_data")
+    for field in (key_date_field, monetary_field, identity_field, user_id_field):
+        if field not in raw_data:
+            raise ValueError(f"Field '{field}' not found in raw_data")
 
     key_date = date.fromisoformat(raw_data[key_date_field])
     days_until = (key_date - today).days
     user_id = raw_data[user_id_field]
 
-    # Deterministic identity: same user + same scenario type + same key
-    # date -> same signal_id, always, regardless of when it's checked or
-    # what the monetary amount happens to be that day. This is what lets
-    # the backend recognize "I've already told this user about this
-    # specific commitment" and avoid repeat-notifying about an unchanged
-    # fact every time the scheduler runs.
-    fingerprint_source = f"{user_id}|{source_type}|{raw_data[key_date_field]}"
+    # Deterministic identity built from STABLE fields only (user, scenario
+    # type, business identifier) -- deliberately excludes the date, since
+    # different date fields or values must not change the identity of the
+    # same underlying commitment.
+    fingerprint_source = f"{user_id}|{source_type}|{raw_data[identity_field]}"
     signal_id = hashlib.sha256(fingerprint_source.encode()).hexdigest()[:16]
 
     return FinancialSignal(

@@ -69,16 +69,23 @@ recommend based on an assumption.
 ## Tracking identity across a signal's lifecycle
 
 The FIRST tool you call for any evaluation, parse_financial_signals,
-returns a signal_id. This signal_id represents the underlying real-world
-commitment (a specific contract, trial, or promo), NOT this particular
-check. You MUST pass this exact same signal_id into whichever of
-stage_financial_card or request_missing_data you call afterward, and
-that same signal_id must appear inside the card object(s) you pass to
+requires an identity_field parameter: the name of whichever field in
+the raw data holds a STABLE business identifier for this commitment
+(e.g. "provider", "service", "card_provider" -- whatever names the
+actual company/product involved). Never choose a date field or a
+monetary field for identity_field -- those change over time and would
+break the system's ability to recognize this as the same commitment on
+a future check. If the raw data has multiple date fields, always use
+the SAME identity_field choice for the same kind of signal, every time
+-- do not vary this between calls.
+
+parse_financial_signals returns a signal_id computed from this. This
+signal_id represents the underlying real-world commitment, NOT this
+particular check. You MUST pass this exact same signal_id into
+whichever of stage_financial_card or request_missing_data you call
+afterward, and it must appear inside the card object(s) you pass to
 finalize_check. Never invent a new signal_id, never omit it, never
-change it between tool calls within the same evaluation. This is what
-allows the system to recognize "I already told the user about this
-exact commitment" and avoid repeatedly notifying them about an
-unchanged fact every time you run.
+change it between tool calls within the same evaluation.
 
 ## Before staging any card
 
