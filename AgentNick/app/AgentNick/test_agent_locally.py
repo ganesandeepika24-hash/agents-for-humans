@@ -17,7 +17,7 @@ standard process.
 """
 
 async def main():
-    agent = get_or_create_agent("test-session-2")
+    agent = get_or_create_agent("test-session-3")
     async for event in agent.stream_async(prompt):
         if not isinstance(event, dict) or "event" not in event:
             continue
@@ -28,18 +28,23 @@ async def main():
             if "toolUse" in start:
                 print(f"\n>>> TOOL CALL: {start['toolUse'].get('name')}")
 
+        if "contentBlockStop" in e:
+            pass  # end of a block, no action needed
+
+        # Tool results come back as part of the next model turn's input --
+        # print the raw message content whenever it contains a toolResult
+        if "message" in e:
+            for block in e["message"].get("content", []):
+                if isinstance(block, dict) and "toolResult" in block:
+                    tr = block["toolResult"]
+                    status = tr.get("status")
+                    content = tr.get("content")
+                    print(f"<<< TOOL RESULT status={status}")
+                    print(f"    {json.dumps(content)[:500]}")
+
         if "contentBlockDelta" in e:
             delta = e["contentBlockDelta"].get("delta", {})
-            if "toolUse" in delta:
-                print(f"    input chunk: {delta['toolUse'].get('input', '')}", end="")
-
-        if "message" in e:
-            msg = e["message"]
-            if msg.get("role") == "user":
-                for block in msg.get("content", []):
-                    if "toolResult" in block:
-                        tr = block["toolResult"]
-                        print(f"\n<<< TOOL RESULT status={tr.get('status')}")
-                        print(f"    content: {tr.get('content')}")
+            if "text" in delta:
+                print(delta["text"], end="", flush=True)
 
 asyncio.run(main())

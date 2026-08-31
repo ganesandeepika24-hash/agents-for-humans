@@ -1,11 +1,11 @@
 """
 Tool: stage_financial_card
 
-Generic card-staging tool. Accepts options as a list of plain dicts
-(each with label, option_type, and optionally email_to/email_subject/
-email_body or action_url) rather than a nested Pydantic list, since
-flat/dict types are reliable with Strands tool-calling while nested
-BaseModel parameters are not.
+Generic card-staging tool. Accepts options as a list of plain dicts.
+Tolerant of extra/unexpected keys the FM includes (description,
+impact_gbp, etc -- ignored). Unrecognized option_type values fall back
+to "dismiss" rather than raising, since we can't enumerate every phrase
+an FM might use for a no-action option ("none", "no_action", "skip").
 """
 
 from strands import tool
@@ -19,6 +19,8 @@ from .interfaces import (
 )
 from .stage_approval_card import stage_approval_card
 
+_VALID_TYPES = {t.value for t in CardOptionType}
+
 
 @tool
 def stage_financial_card(
@@ -31,6 +33,10 @@ def stage_financial_card(
 ) -> ApprovalCard:
     parsed_options = []
     for opt in options:
+        raw_type = opt.get("option_type") or opt.get("action_type") or "dismiss"
+        if raw_type not in _VALID_TYPES:
+            raw_type = "dismiss"
+
         email_payload = None
         if opt.get("email_to"):
             email_payload = EmailPayload(
@@ -38,11 +44,17 @@ def stage_financial_card(
                 subject=opt.get("email_subject", ""),
                 body=opt.get("email_body", ""),
             )
+
+        option_type = CardOptionType(raw_type)
+        action_url = opt.get("action_url") if option_type == CardOptionType.ACTION_URL else None
+        if option_type == CardOptionType.EMAIL and email_payload is None:
+            option_type = CardOptionType.DISMISS  # can't satisfy email requirement, degrade safely
+
         parsed_options.append(CardOption(
-            label=opt["label"],
-            option_type=CardOptionType(opt["option_type"]),
+            label=opt.get("label", "Option"),
+            option_type=option_type,
             email_payload=email_payload,
-            action_url=opt.get("action_url"),
+            action_url=action_url,
         ))
 
     return stage_approval_card(StageApprovalCardInput(
