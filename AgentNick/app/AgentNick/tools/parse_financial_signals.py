@@ -1,66 +1,60 @@
 """
 Tool: parse_financial_signals
 
-Normalizes raw mock data (tariff / trial / card_promo) into one common
-FinancialSignal shape, so downstream evaluators don't each need to know
-about all three raw data formats.
+Normalizes ANY raw financial signal data into one common FinancialSignal
+shape. Rather than a hardcoded table of known field names per scenario
+type, the caller (the FM) specifies which field holds the key date and
+which holds the key monetary amount — this keeps the tool genuinely
+generic across any scenario, not just the three originally demoed.
 """
 
 from datetime import date
 
 from strands import tool
 
-from .interfaces import FinancialSignal, ParseSignalsInput
-
-
-# Maps each source_type to which raw field holds the "date that matters"
-# and which raw field holds "the number at stake".
-_KEY_DATE_FIELDS = {
-    "tariff": "contract_end_date",
-    "trial": "trial_end_date",
-    "card_promo": "promo_apr_end_date",
-}
-
-_MONETARY_FIELDS = {
-    "tariff": "current_price_gbp",
-    "trial": "auto_bill_amount_gbp",
-    "card_promo": "current_balance_gbp",
-}
+from .interfaces import FinancialSignal
 
 
 @tool
-def parse_financial_signals(input: ParseSignalsInput, as_of_date: date | None = None) -> FinancialSignal:
+def parse_financial_signals(
+    source_type: str,
+    raw_data: dict,
+    key_date_field: str,
+    monetary_field: str,
+    user_id_field: str = "user_id",
+    as_of_date: str | None = None,
+) -> FinancialSignal:
     """
-    Normalize a raw tariff / trial / card_promo record into a FinancialSignal.
+    Normalize a raw financial record into a FinancialSignal.
 
-    as_of_date defaults to date.today() for real usage. Tests and demo
-    scripts can pass an explicit date for deterministic, repeatable output.
+    source_type: a short label for what kind of signal this is (e.g.
+        "tariff", "trial", "card_promo", or any other kind).
+    raw_data: the raw dict of fields for this signal.
+    key_date_field: which key in raw_data holds the date that matters
+        (contract end, trial end, promo end, deadline, etc).
+    monetary_field: which key in raw_data holds the amount at stake.
+    user_id_field: which key in raw_data holds the user identifier.
+        Defaults to "user_id".
+    as_of_date: ISO date string (YYYY-MM-DD) to treat as "today". Defaults
+        to the real current date if not given.
     """
-    today = as_of_date or date.today()
-    raw = input.raw_data
-    source_type = input.source_type
+    today = date.fromisoformat(as_of_date) if as_of_date else date.today()
 
-    if source_type not in _KEY_DATE_FIELDS:
-        raise ValueError(f"Unknown source_type: {source_type}")
+    if key_date_field not in raw_data:
+        raise ValueError(f"Field '{key_date_field}' not found in raw_data")
+    if monetary_field not in raw_data:
+        raise ValueError(f"Field '{monetary_field}' not found in raw_data")
+    if user_id_field not in raw_data:
+        raise ValueError(f"Field '{user_id_field}' not found in raw_data")
 
-    key_date_field = _KEY_DATE_FIELDS[source_type]
-    monetary_field = _MONETARY_FIELDS[source_type]
-
-    if key_date_field not in raw:
-        raise ValueError(f"Expected field '{key_date_field}' missing from raw_data for source_type '{source_type}'")
-    if monetary_field not in raw:
-        raise ValueError(f"Expected field '{monetary_field}' missing from raw_data for source_type '{source_type}'")
-    if "user_id" not in raw:
-        raise ValueError("Expected field 'user_id' missing from raw_data")
-
-    key_date = date.fromisoformat(raw[key_date_field])
+    key_date = date.fromisoformat(raw_data[key_date_field])
     days_until = (key_date - today).days
 
     return FinancialSignal(
         source_type=source_type,
-        user_id=raw["user_id"],
+        user_id=raw_data[user_id_field],
         key_date=key_date,
         days_until_key_date=days_until,
-        monetary_amount_gbp=float(raw[monetary_field]),
-        raw_data=raw,
+        monetary_amount_gbp=float(raw_data[monetary_field]),
+        raw_data=raw_data,
     )
