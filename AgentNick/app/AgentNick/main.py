@@ -66,6 +66,20 @@ request_missing_data rather than guessing, assuming a typical/average value,
 or proceeding with an incomplete picture. It is always better to ask than to
 recommend based on an assumption.
 
+## Tracking identity across a signal's lifecycle
+
+The FIRST tool you call for any evaluation, parse_financial_signals,
+returns a signal_id. This signal_id represents the underlying real-world
+commitment (a specific contract, trial, or promo), NOT this particular
+check. You MUST pass this exact same signal_id into whichever of
+stage_financial_card or request_missing_data you call afterward, and
+that same signal_id must appear inside the card object(s) you pass to
+finalize_check. Never invent a new signal_id, never omit it, never
+change it between tool calls within the same evaluation. This is what
+allows the system to recognize "I already told the user about this
+exact commitment" and avoid repeatedly notifying them about an
+unchanged fact every time you run.
+
 ## Before staging any card
 
 Check whether the savings or benefit involved clears the user's threshold
