@@ -47,20 +47,21 @@ def has_been_notified(user_id: str, signal_id: str) -> bool:
 
 
 def record_notification(user_id: str, signal_id: str, card: dict):
-    """Insert if new. If this signal was already resolved, leave it
-    resolved -- a fresh check finding the same underlying commitment
-    again is not grounds to resurface something the user already
-    explicitly decided on. Only updates card_json for entries still
-    genuinely pending (fresher numbers on an unresolved item)."""
+    """Insert ONLY if this signal_id has never been seen before for this
+    user. Deliberately never overwrites card_json on subsequent calls,
+    even while still pending -- the agent regenerates fresh wording on
+    every /check call (same underlying facts, different phrasing), and
+    if we kept overwriting the stored text, the card visible to the
+    user would appear to "change" on every page load. Freezing the
+    content on first sight keeps what the user sees stable, while
+    has_been_notified()/status still correctly track resolution."""
     conn = _get_connection()
     try:
         conn.execute(
             """
-            INSERT INTO notified_signals (user_id, signal_id, card_json, first_notified_at, status)
+            INSERT OR IGNORE INTO notified_signals
+                (user_id, signal_id, card_json, first_notified_at, status)
             VALUES (?, ?, ?, ?, 'pending')
-            ON CONFLICT(user_id, signal_id) DO UPDATE SET
-                card_json = excluded.card_json
-            WHERE notified_signals.status != 'resolved'
             """,
             (user_id, signal_id, json.dumps(card), datetime.utcnow().isoformat()),
         )
