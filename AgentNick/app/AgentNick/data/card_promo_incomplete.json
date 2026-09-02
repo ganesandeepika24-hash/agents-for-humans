@@ -1,6 +1,6 @@
 {
   "user_id": "demo_user",
-  "card_provider": "ExampleBank",
+  "card_provider": "Vantage Trust Bank",
   "promo_apr_start_date": "2025-09-25",
   "promo_apr_end_date": "2026-09-25",
   "current_balance_gbp": 1200.0,

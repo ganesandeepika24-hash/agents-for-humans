@@ -1,6 +1,6 @@
 {
   "user_id": "demo_user",
-  "card_provider": "ExampleBank",
+  "card_provider": "Vantage Trust Bank",
   "promo_apr_start_date": "2025-09-25",
   "promo_apr_end_date": "2026-09-25",
   "standard_apr_pct": 24.9,
@@ -8,7 +8,7 @@
   "minimum_payment_gbp": 35.0,
   "balance_transfer_offers": [
     {
-      "provider": "RivalBank",
+      "provider": "Clearway Finance",
       "promo_apr_pct": 0.0,
       "promo_duration_months": 18,
       "transfer_fee_pct": 3.0

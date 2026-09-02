@@ -1,6 +1,6 @@
 {
   "user_id": "demo_user",
-  "provider": "ExampleISP",
+  "provider": "Meridian Broadband",
   "current_speed_mbps": 150,
   "current_price_gbp": 45.0,
   "contract_start_date": "2025-09-15",
@@ -8,14 +8,14 @@
   "renewal_price_gbp": 65.0,
   "market_comparable_offers": [
     {
-      "provider": "RivalISP",
+      "provider": "Northlink Fibre",
       "speed_mbps": 150,
       "price_gbp": 38.0,
       "signup_fee_gbp": 20.0,
       "contract_length_months": 18
     },
     {
-      "provider": "ThirdISP",
+      "provider": "Coastway Internet",
       "speed_mbps": 152,
       "price_gbp": 40.0,
       "signup_fee_gbp": 0.0,

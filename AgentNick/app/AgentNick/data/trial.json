@@ -1,10 +1,10 @@
 {
   "user_id": "demo_user",
-  "service": "ExampleStreaming",
+  "service": "Reelbox",
   "trial_start_date": "2026-08-19",
   "trial_end_date": "2026-09-02",
   "auto_bill_amount_gbp": 12.99,
   "billing_frequency": "monthly",
-  "cancellation_email": "support@examplestreaming.com",
+  "cancellation_email": "support@reelbox.example",
   "cancellation_deadline": "2026-08-30"
 }
