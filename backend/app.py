@@ -29,6 +29,8 @@ from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal
 from user_settings import get_threshold, set_threshold
+from jobs import create_job, complete_job, fail_job, get_job
+import threading
 
 app = FastAPI(title="AgentNick Backend")
 
@@ -164,47 +166,67 @@ class CheckRequest(BaseModel):
     as_of_date: str = "2026-08-30"
 
 
-@app.post("/check")
-def check(req: CheckRequest, user_id: str = Depends(require_user)):
-    if req.scenario_type not in _SCENARIO_FILES:
-        raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {req.scenario_type}")
-
-    data_path = DATA_DIR / _SCENARIO_FILES[req.scenario_type]
-    with open(data_path) as f:
-        raw_data = json.load(f)
-
-    user_threshold = get_threshold(user_id)
+def _run_check_job(job_id: str, user_id: str, scenario_type: str, as_of_date: str):
     try:
+        data_path = DATA_DIR / _SCENARIO_FILES[scenario_type]
+        with open(data_path) as f:
+            raw_data = json.load(f)
+
+        user_threshold = get_threshold(user_id)
         result = invoke_agent_for_check(
-            scenario_type=req.scenario_type,
+            scenario_type=scenario_type,
             raw_data=raw_data,
-            as_of_date=req.as_of_date,
+            as_of_date=as_of_date,
             threshold_min_gbp=user_threshold.get("min_gbp"),
             threshold_min_pct=user_threshold.get("min_pct"),
         )
-    except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"The evaluation took too long or failed. Please try again. ({type(e).__name__})",
-        )
 
-    frozen_cards = []
-    for card in result.get("cards", []):
-        signal_id = card.get("signal_id")
-        if not signal_id:
+        frozen_cards = []
+        for card in result.get("cards", []):
+            signal_id = card.get("signal_id")
+            if not signal_id:
+                frozen_cards.append(card)
+                continue
+            existing = get_card_by_signal(user_id, signal_id)
+            if existing is not None:
+                if existing.get("status") != "resolved":
+                    frozen_cards.append(existing)
+                continue
+            record_notification(user_id, signal_id, card)
             frozen_cards.append(card)
-            continue
-        existing = get_card_by_signal(user_id, signal_id)
-        if existing is not None:
-            # Already known -- return the FROZEN version, never the fresh
-            # agent response, so displayed text never changes on repeat checks.
-            if existing.get("status") != "resolved":
-                frozen_cards.append(existing)
-            continue
-        record_notification(user_id, signal_id, card)
-        frozen_cards.append(card)
 
-    return {"cards": frozen_cards, "summary_text": result["full_text"]}
+        complete_job(job_id, {"cards": frozen_cards, "summary_text": result["full_text"]})
+    except Exception as e:
+        fail_job(job_id, f"{type(e).__name__}: {e}")
+
+
+@app.post("/check")
+def check(req: CheckRequest, user_id: str = Depends(require_user)):
+    """Starts a check job and returns immediately with a job_id, instead
+    of blocking -- works around Codespaces' tunnel enforcing a shorter
+    timeout than the agent call can take. Poll GET /check-status/{job_id}
+    for the result."""
+    if req.scenario_type not in _SCENARIO_FILES:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {req.scenario_type}")
+
+    job_id = create_job()
+    thread = threading.Thread(
+        target=_run_check_job,
+        args=(job_id, user_id, req.scenario_type, req.as_of_date),
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/check-status/{job_id}")
+def check_status(job_id: str, user_id: str = Depends(require_user)):
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["status"] == "error":
+        raise HTTPException(status_code=503, detail=job["error"])
+    return job
 
 
 @app.get("/pending-cards")
