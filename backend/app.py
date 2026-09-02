@@ -27,7 +27,7 @@ from send_email import send_action_email
 from scheduler import start_scheduler, pause as pause_scheduler, resume as resume_scheduler, is_paused
 from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
-from cards import record_notification, mark_resolved, get_pending_cards_for_user
+from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal
 from user_settings import get_threshold, set_threshold
 
 app = FastAPI(title="AgentNick Backend")
@@ -174,20 +174,37 @@ def check(req: CheckRequest, user_id: str = Depends(require_user)):
         raw_data = json.load(f)
 
     user_threshold = get_threshold(user_id)
-    result = invoke_agent_for_check(
-        scenario_type=req.scenario_type,
-        raw_data=raw_data,
-        as_of_date=req.as_of_date,
-        threshold_min_gbp=user_threshold.get("min_gbp"),
-        threshold_min_pct=user_threshold.get("min_pct"),
-    )
+    try:
+        result = invoke_agent_for_check(
+            scenario_type=req.scenario_type,
+            raw_data=raw_data,
+            as_of_date=req.as_of_date,
+            threshold_min_gbp=user_threshold.get("min_gbp"),
+            threshold_min_pct=user_threshold.get("min_pct"),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"The evaluation took too long or failed. Please try again. ({type(e).__name__})",
+        )
 
+    frozen_cards = []
     for card in result.get("cards", []):
         signal_id = card.get("signal_id")
-        if signal_id:
-            record_notification(user_id, signal_id, card)
+        if not signal_id:
+            frozen_cards.append(card)
+            continue
+        existing = get_card_by_signal(user_id, signal_id)
+        if existing is not None:
+            # Already known -- return the FROZEN version, never the fresh
+            # agent response, so displayed text never changes on repeat checks.
+            if existing.get("status") != "resolved":
+                frozen_cards.append(existing)
+            continue
+        record_notification(user_id, signal_id, card)
+        frozen_cards.append(card)
 
-    return {"cards": result["cards"], "summary_text": result["full_text"]}
+    return {"cards": frozen_cards, "summary_text": result["full_text"]}
 
 
 @app.get("/pending-cards")

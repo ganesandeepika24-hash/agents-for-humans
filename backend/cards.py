@@ -82,6 +82,22 @@ def mark_resolved(user_id: str, signal_id: str):
         conn.close()
 
 
+def get_card_by_signal(user_id: str, signal_id: str) -> dict | None:
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT card_json, status FROM notified_signals WHERE user_id = ? AND signal_id = ?",
+            (user_id, signal_id),
+        ).fetchone()
+        if row is None:
+            return None
+        card = json.loads(row[0])
+        card["status"] = row[1]
+        return card
+    finally:
+        conn.close()
+
+
 def get_pending_cards_for_user(user_id: str) -> list[dict]:
     conn = _get_connection()
     try:

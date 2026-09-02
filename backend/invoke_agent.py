@@ -14,6 +14,12 @@ import json
 import uuid
 
 import boto3
+from botocore.config import Config
+
+# Missing-data and other complex evaluations can take longer than
+# boto3's 60s default read timeout, since the FM may self-correct
+# through several tool calls. Extend generously.
+_BOTO_CONFIG = Config(read_timeout=180, connect_timeout=10, retries={"max_attempts": 0})
 
 RUNTIME_ARN = "arn:aws:bedrock-agentcore:eu-central-1:299276269111:runtime/AgentNick_AgentNick-a4vHUs5YeY"
 
@@ -29,7 +35,7 @@ def invoke_agent_for_check(
     Sends a data-driven evaluation prompt to the deployed agent and
     returns {"full_text": str, "cards": list[dict]}.
     """
-    client = boto3.client("bedrock-agentcore", region_name="eu-central-1")
+    client = boto3.client("bedrock-agentcore", region_name="eu-central-1", config=_BOTO_CONFIG)
 
     threshold_instruction = ""
     if threshold_min_gbp is not None or threshold_min_pct is not None:
