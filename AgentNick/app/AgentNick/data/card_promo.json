@@ -11,11 +11,13 @@
       "provider": "Clearway Finance",
       "promo_apr_pct": 0.0,
       "promo_duration_months": 18,
-      "transfer_fee_pct": 3.0
+      "transfer_fee_pct": 3.0,
+      "signup_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/clearway-finance.html"
     }
   ],
   "missed_payment_count": 0,
   "promo_rate_still_active": true,
   "payment_method": "manual",
-  "next_payment_due_date": "2026-09-05"
+  "next_payment_due_date": "2026-09-05",
+  "provider_portal_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/vantage-trust-bank.html"
 }

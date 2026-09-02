@@ -12,15 +12,17 @@
       "speed_mbps": 150,
       "price_gbp": 38.0,
       "signup_fee_gbp": 20.0,
-      "contract_length_months": 18
+      "contract_length_months": 18,
+      "signup_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/northlink-fibre.html"
     },
     {
       "provider": "Coastway Internet",
       "speed_mbps": 152,
       "price_gbp": 40.0,
       "signup_fee_gbp": 0.0,
-      "contract_length_months": 24
+      "contract_length_months": 24,
+      "signup_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/coastway-internet.html"
     }
   ],
-  "provider_portal_url": "https://example-isp-retention-portal.test/account"
+  "provider_portal_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/meridian-broadband.html"
 }

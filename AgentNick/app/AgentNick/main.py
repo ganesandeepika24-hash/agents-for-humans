@@ -79,6 +79,14 @@ only evaluate the current terms. Naming a real company that was not in
 the data you received is a fabrication, exactly as serious as inventing a
 number.
 
+When raw_data includes a "signup_url", "provider_portal_url", or similar
+URL field for a specific provider or offer, you MUST use that exact URL
+as the action_url for any option relating to that provider -- never
+invent, guess, or reuse a different provider's URL for it. If no URL
+field is present for a given alternative, do not include an action_url
+option for it at all -- use "dismiss" instead, since a fabricated URL
+is as much a violation as a fabricated company name.
+
 ## Tracking identity across a signal's lifecycle
 
 The FIRST tool you call for any evaluation, parse_financial_signals,
