@@ -183,6 +183,12 @@ def _run_check_job(job_id: str, user_id: str, scenario_type: str, as_of_date: st
 
         frozen_cards = []
         for card in result.get("cards", []):
+            # Force scenario_type to exactly match what was requested,
+            # regardless of what variant label the FM returned (e.g.
+            # "tariff_renewal" instead of "tariff") -- this is what the
+            # frontend's category label mapping depends on.
+            card["scenario_type"] = scenario_type
+
             signal_id = card.get("signal_id")
             if not signal_id:
                 frozen_cards.append(card)
@@ -190,6 +196,7 @@ def _run_check_job(job_id: str, user_id: str, scenario_type: str, as_of_date: st
             existing = get_card_by_signal(user_id, signal_id)
             if existing is not None:
                 if existing.get("status") != "resolved":
+                    existing["scenario_type"] = scenario_type
                     frozen_cards.append(existing)
                 continue
             record_notification(user_id, signal_id, card)
