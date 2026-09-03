@@ -57,7 +57,22 @@ def _remove_subscription(user_id: str, endpoint: str):
         conn.close()
 
 
-def send_push_to_user(user_id: str, title: str, body: str, url: str | None = None):
+def send_push_to_user(
+    user_id: str,
+    title: str,
+    body: str,
+    url: str | None = None,
+    card_id: str | None = None,
+    signal_id: str | None = None,
+    actions: list[dict] | None = None,
+):
+    """
+    actions: list of {"action": str, "title": str} dicts, up to 2 --
+    these render as buttons directly on the notification. Each
+    "action" value should match an option_type the service worker
+    knows how to resolve (e.g. "dismiss", "remind_later") or a card
+    reference for the frontend to handle if opened.
+    """
     conn = _get_connection()
     try:
         rows = conn.execute(
@@ -70,7 +85,14 @@ def send_push_to_user(user_id: str, title: str, body: str, url: str | None = Non
         print(f"[push] No subscriptions for user {user_id}, skipping push.")
         return
 
-    payload = json.dumps({"title": title, "body": body, "url": url or "/"})
+    payload = json.dumps({
+        "title": title,
+        "body": body,
+        "url": url or "/",
+        "card_id": card_id,
+        "signal_id": signal_id,
+        "actions": actions or [],
+    })
 
     for endpoint, sub_json in rows:
         sub = json.loads(sub_json)

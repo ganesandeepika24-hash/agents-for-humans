@@ -103,12 +103,29 @@ def _send_digest(user_id: str, cards: list[dict]):
     )
     print(f"[scheduler] Digest email sent for user {user_id}: {result.get('id')}")
 
-    send_push_to_user(
-        user_id,
-        title=f"AgentNick: {len(cards)} update(s)",
-        body=cards[0]["title"] if len(cards) == 1 else f"{len(cards)} things need your attention",
-        url="/static/index.html",
-    )
+    if len(cards) == 1:
+        card = cards[0]
+        actions = []
+        for opt in card.get("options", [])[:2]:
+            opt_type = opt.get("option_type")
+            if opt_type in ("dismiss", "remind_later"):
+                actions.append({"action": opt_type, "title": opt.get("label", opt_type)})
+        send_push_to_user(
+            user_id,
+            title=card["title"],
+            body=card["summary"][:150],
+            url="/static/index.html",
+            card_id=card.get("card_id"),
+            signal_id=card.get("signal_id"),
+            actions=actions,
+        )
+    else:
+        send_push_to_user(
+            user_id,
+            title=f"AgentNick: {len(cards)} update(s)",
+            body=f"{len(cards)} things need your attention",
+            url="/static/index.html",
+        )
 
 
 def start_scheduler():
