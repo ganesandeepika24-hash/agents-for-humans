@@ -99,6 +99,11 @@ class CardOptionType(str, Enum):
     REVEAL_COMPARISON = "reveal_comparison"
     MANUAL_INPUT = "manual_input"
     DOCUMENT_UPLOAD = "document_upload"
+    INFO_ONLY = "info_only"  # a genuine recommendation with no direct
+                              # link available (e.g. no signup_url in
+                              # the data) -- distinct from "dismiss",
+                              # which means the user is choosing to take
+                              # no action, not that a link is missing
 
 
 class CardOption(BaseModel):
