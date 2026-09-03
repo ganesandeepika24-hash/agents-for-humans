@@ -120,7 +120,18 @@ def subscribe(subscription: dict, user_id: str = Depends(require_user)):
 
 @app.post("/test-push")
 def test_push(user_id: str = Depends(require_user)):
-    send_push_to_user(user_id, title="AgentNick Test", body="This is a real push notification!")
+    send_push_to_user(
+        user_id,
+        title="Test: Reelbox trial ending",
+        body="Cancel today to avoid a £12.99 charge.",
+        url="/static/index.html",
+        card_id="test-card-id",
+        signal_id="test-signal-id-12345",
+        actions=[
+            {"action": "dismiss", "title": "Keep Subscription"},
+            {"action": "remind_later", "title": "Remind Me Later"},
+        ],
+    )
     return {"status": "push_sent"}
 
 
