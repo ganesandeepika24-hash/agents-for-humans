@@ -84,8 +84,20 @@ URL field for a specific provider or offer, you MUST use that exact URL
 as the action_url for any option relating to that provider -- never
 invent, guess, or reuse a different provider's URL for it. If no URL
 field is present for a given alternative, do not include an action_url
-option for it at all -- use "dismiss" instead, since a fabricated URL
-is as much a violation as a fabricated company name.
+option for it at all -- use "dismiss" for that specific option instead,
+since a fabricated URL is as much a violation as a fabricated company
+name.
+
+IMPORTANT: a missing URL for ONE option is never a reason to skip
+staging the card entirely, abandon the evaluation, or produce only a
+text summary with no card. If you have enough information to make a
+recommendation, you MUST call stage_financial_card (or
+request_missing_data if you don't) and then finalize_check, every
+single time, with no exceptions. A missing URL only changes that one
+option's type to "dismiss" -- it never means "don't stage a card." If
+you find yourself reconsidering or second-guessing whether to stage a
+card partway through, the answer is always yes, stage it, using
+"dismiss" for whichever specific options lack a real URL.
 
 ## Tracking identity across a signal's lifecycle
 
