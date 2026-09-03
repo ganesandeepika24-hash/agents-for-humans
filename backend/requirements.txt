@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+boto3
+botocore
+resend
+pywebpush
+apscheduler
+python-dotenv
+pydantic
+python-multipart

@@ -31,6 +31,7 @@ from cards import record_notification, mark_resolved, get_pending_cards_for_user
 from user_settings import get_threshold, set_threshold
 from jobs import create_job, complete_job, fail_job, get_job
 import threading
+from fastapi import UploadFile, File, Form
 
 app = FastAPI(title="AgentNick Backend")
 
@@ -234,6 +235,113 @@ def check_status(job_id: str, user_id: str = Depends(require_user)):
     if job["status"] == "error":
         raise HTTPException(status_code=503, detail=job["error"])
     return job
+
+
+def _run_reeval_job(job_id: str, user_id: str, scenario_type: str, raw_data: dict, as_of_date: str):
+    """Same as _run_check_job, but takes raw_data directly (already
+    merged with new manual/document-extracted values) instead of
+    loading it from a mock file."""
+    try:
+        user_threshold = get_threshold(user_id)
+        result = invoke_agent_for_check(
+            scenario_type=scenario_type,
+            raw_data=raw_data,
+            as_of_date=as_of_date,
+            threshold_min_gbp=user_threshold.get("min_gbp"),
+            threshold_min_pct=user_threshold.get("min_pct"),
+        )
+        frozen_cards = []
+        for card in result.get("cards", []):
+            card["scenario_type"] = scenario_type
+            signal_id = card.get("signal_id")
+            if not signal_id:
+                frozen_cards.append(card)
+                continue
+            existing = get_card_by_signal(user_id, signal_id)
+            if existing is not None:
+                if existing.get("status") != "resolved":
+                    existing["scenario_type"] = scenario_type
+                    frozen_cards.append(existing)
+                continue
+            record_notification(user_id, signal_id, card)
+            frozen_cards.append(card)
+        complete_job(job_id, {"cards": frozen_cards, "summary_text": result["full_text"]})
+    except Exception as e:
+        fail_job(job_id, f"{type(e).__name__}: {e}")
+
+
+class SubmitDataRequest(BaseModel):
+    signal_id: str
+    scenario_type: str
+    as_of_date: str = "2026-08-30"
+    values: dict
+
+
+@app.post("/submit-data")
+def submit_data(req: SubmitDataRequest, user_id: str = Depends(require_user)):
+    """User manually entered missing fields. Merge into the original
+    mock raw_data for this scenario and re-evaluate."""
+    if req.scenario_type not in _SCENARIO_FILES:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {req.scenario_type}")
+
+    data_path = DATA_DIR / _SCENARIO_FILES[req.scenario_type]
+    with open(data_path) as f:
+        raw_data = json.load(f)
+    raw_data.update(req.values)
+
+    # Mark the old (incomplete) signal resolved so it stops showing as
+    # pending -- the re-evaluation below will produce a fresh signal_id
+    # once real data is present.
+    mark_resolved(user_id, req.signal_id)
+
+    job_id = create_job()
+    thread = threading.Thread(
+        target=_run_reeval_job,
+        args=(job_id, user_id, req.scenario_type, raw_data, req.as_of_date),
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.post("/upload-document")
+async def upload_document(
+    signal_id: str = Form(...),
+    scenario_type: str = Form(...),
+    as_of_date: str = Form("2026-08-30"),
+    file: UploadFile = File(...),
+    user_id: str = Depends(require_user),
+):
+    """User uploaded a document (e.g. a statement). Extract fields via
+    the agent's own extract_from_document tool logic, merge into raw_data,
+    and re-evaluate."""
+    if scenario_type not in _SCENARIO_FILES:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {scenario_type}")
+
+    file_bytes = await file.read()
+    media_type = file.content_type or "application/pdf"
+
+    try:
+        from upload_extraction import extract_fields_via_bedrock
+        extracted = extract_fields_via_bedrock(file_bytes, media_type, scenario_type)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not extract data from document: {e}")
+
+    data_path = DATA_DIR / _SCENARIO_FILES[scenario_type]
+    with open(data_path) as f:
+        raw_data = json.load(f)
+    raw_data.update({k: v for k, v in extracted.items() if v is not None})
+
+    mark_resolved(user_id, signal_id)
+
+    job_id = create_job()
+    thread = threading.Thread(
+        target=_run_reeval_job,
+        args=(job_id, user_id, scenario_type, raw_data, as_of_date),
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id, "status": "running"}
 
 
 @app.get("/pending-cards")
