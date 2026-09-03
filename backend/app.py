@@ -27,7 +27,7 @@ from send_email import send_action_email
 from scheduler import start_scheduler, pause as pause_scheduler, resume as resume_scheduler, is_paused
 from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
-from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal
+from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal
 from user_settings import get_threshold, set_threshold
 from jobs import create_job, complete_job, fail_job, get_job
 import threading
@@ -289,10 +289,11 @@ def submit_data(req: SubmitDataRequest, user_id: str = Depends(require_user)):
         raw_data = json.load(f)
     raw_data.update(req.values)
 
-    # Mark the old (incomplete) signal resolved so it stops showing as
-    # pending -- the re-evaluation below will produce a fresh signal_id
-    # once real data is present.
-    mark_resolved(user_id, req.signal_id)
+    # Forget the old (incomplete) entry so the re-evaluation below --
+    # which will produce the SAME signal_id, since identity is based on
+    # a stable field, not on which data happens to be populated -- gets
+    # recorded as genuinely new, rather than suppressed as resolved.
+    forget_signal(user_id, req.signal_id)
 
     job_id = create_job()
     thread = threading.Thread(
@@ -332,7 +333,7 @@ async def upload_document(
         raw_data = json.load(f)
     raw_data.update({k: v for k, v in extracted.items() if v is not None})
 
-    mark_resolved(user_id, signal_id)
+    forget_signal(user_id, signal_id)
 
     job_id = create_job()
     thread = threading.Thread(

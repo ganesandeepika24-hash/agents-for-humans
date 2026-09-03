@@ -82,6 +82,26 @@ def mark_resolved(user_id: str, signal_id: str):
         conn.close()
 
 
+def forget_signal(user_id: str, signal_id: str):
+    """Completely removes the stored entry for this signal, rather than
+    marking it resolved. Used when the user has submitted new data
+    (manual entry or document upload) -- the signal_id stays the same
+    (it's derived from a stable identity field, not from which fields
+    happen to be populated), so we can't rely on a fresh signal_id
+    appearing after re-evaluation. Forgetting the old entry lets the
+    re-evaluation's record_notification treat it as genuinely new,
+    rather than being silently suppressed as already-resolved."""
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "DELETE FROM notified_signals WHERE user_id = ? AND signal_id = ?",
+            (user_id, signal_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_card_by_signal(user_id: str, signal_id: str) -> dict | None:
     conn = _get_connection()
     try:
