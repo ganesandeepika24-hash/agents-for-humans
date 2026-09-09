@@ -2,13 +2,17 @@
 scheduler.py
 
 Runs /check-equivalent logic on a timer, across all registered users
-and all known scenario types, without any user action. Uses cards.py
-(persistent, per-user) to avoid re-notifying about signals already
-surfaced. Sends a digest email + push per user for any newly-found
-cards belonging to them.
+and all known scenario types, without any user action. Uses a data
+fingerprint (cards.py) to skip calling the AI entirely when nothing
+about the underlying data has changed since last time -- this is what
+lets the check interval scale (even to every few minutes) without
+scaling AI cost, since cost now follows genuine data changes, not
+polling frequency. Sends a digest email + push per user for any
+newly-found or genuinely-changed cards belonging to them.
 """
 
 import json
+import hashlib
 from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -17,7 +21,10 @@ from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
 from push_notifications import send_push_to_user
 from users import list_all_user_ids
-from cards import has_been_notified, record_notification
+from cards import (
+    record_notification, get_card_by_signal, reopen_signal,
+    get_last_fingerprint, set_last_fingerprint,
+)
 
 _paused = False
 
@@ -37,12 +44,17 @@ def resume():
 def is_paused() -> bool:
     return _paused
 
+
 DATA_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
 _SCENARIO_FILES = {
     "tariff": "tariffs.json",
     "trial": "trial.json",
     "card_promo": "card_promo.json",
 }
+
+
+def _fingerprint(raw_data: dict) -> str:
+    return hashlib.sha256(json.dumps(raw_data, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def run_scheduled_check():
@@ -58,12 +70,20 @@ def run_scheduled_check():
         return
 
     for user_id in user_ids:
-        new_cards = []
+        new_or_changed_cards = []
 
         for scenario_type, filename in _SCENARIO_FILES.items():
             data_path = DATA_DIR / filename
             with open(data_path) as f:
                 raw_data = json.load(f)
+
+            current_fp = _fingerprint(raw_data)
+            last_fp = get_last_fingerprint(user_id, scenario_type)
+
+            if last_fp == current_fp:
+                # Nothing changed for this scenario since we last
+                # checked -- skip the AI call entirely.
+                continue
 
             try:
                 result = invoke_agent_for_check(
@@ -76,15 +96,31 @@ def run_scheduled_check():
                 continue
 
             for card in result.get("cards", []):
+                card["scenario_type"] = scenario_type
                 signal_id = card.get("signal_id")
-                if signal_id and not has_been_notified(user_id, signal_id):
-                    new_cards.append(card)
-                    record_notification(user_id, signal_id, card)
+                if not signal_id:
+                    continue
 
-        if new_cards:
-            _send_digest(user_id, new_cards)
+                existing = get_card_by_signal(user_id, signal_id)
+                if existing is not None:
+                    # We only reach this branch when the fingerprint
+                    # already confirmed the underlying data genuinely
+                    # changed since last check -- reopen regardless of
+                    # whether it was pending (stale) or resolved
+                    # (silenced), and notify about the update.
+                    reopen_signal(user_id, signal_id, card)
+                    new_or_changed_cards.append(card)
+                    continue
+
+                record_notification(user_id, signal_id, card)
+                new_or_changed_cards.append(card)
+
+            set_last_fingerprint(user_id, scenario_type, current_fp)
+
+        if new_or_changed_cards:
+            _send_digest(user_id, new_or_changed_cards)
         else:
-            print(f"[scheduler] No new cards for user {user_id} this run.")
+            print(f"[scheduler] No new or changed cards for user {user_id} this run.")
 
 
 def _send_digest(user_id: str, cards: list[dict]):
