@@ -102,6 +102,71 @@ def forget_signal(user_id: str, signal_id: str):
         conn.close()
 
 
+def _get_fingerprint_connection():
+    conn = sqlite3.connect(_DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS data_fingerprints (
+            user_id TEXT NOT NULL,
+            scenario_type TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            PRIMARY KEY (user_id, scenario_type)
+        )
+    """)
+    return conn
+
+
+def get_last_fingerprint(user_id: str, scenario_type: str) -> str | None:
+    """The stored fingerprint of the raw data values as of the last
+    check for this scenario -- distinct from signal_id, which
+    identifies WHO/WHAT the commitment is about, not what the current
+    numbers are. Used to skip calling the AI entirely when nothing
+    about the underlying data has actually changed since last time."""
+    conn = _get_fingerprint_connection()
+    try:
+        row = conn.execute(
+            "SELECT fingerprint FROM data_fingerprints WHERE user_id = ? AND scenario_type = ?",
+            (user_id, scenario_type),
+        ).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def set_last_fingerprint(user_id: str, scenario_type: str, fingerprint: str):
+    conn = _get_fingerprint_connection()
+    try:
+        conn.execute("""
+            INSERT INTO data_fingerprints (user_id, scenario_type, fingerprint)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, scenario_type) DO UPDATE SET fingerprint = excluded.fingerprint
+        """, (user_id, scenario_type, fingerprint))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def reopen_signal(user_id: str, signal_id: str, card: dict):
+    """Overwrites and reopens a card for this signal_id, REGARDLESS of
+    whether it was previously 'pending' (frozen with stale numbers) or
+    'resolved' (silenced forever). Used specifically when the
+    underlying data values have genuinely changed since the user last
+    saw this signal -- fixes the gap where a resolved or frozen card
+    could never reflect new, materially different facts about the same
+    underlying commitment."""
+    conn = _get_connection()
+    try:
+        conn.execute("""
+            INSERT INTO notified_signals (user_id, signal_id, card_json, first_notified_at, status)
+            VALUES (?, ?, ?, ?, 'pending')
+            ON CONFLICT(user_id, signal_id) DO UPDATE SET
+                card_json = excluded.card_json,
+                status = 'pending'
+        """, (user_id, signal_id, json.dumps(card), datetime.utcnow().isoformat()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_card_by_signal(user_id: str, signal_id: str) -> dict | None:
     conn = _get_connection()
     try:
