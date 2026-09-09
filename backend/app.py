@@ -27,7 +27,7 @@ from send_email import send_action_email
 from scheduler import start_scheduler, pause as pause_scheduler, resume as resume_scheduler, is_paused
 from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
-from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal
+from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal
 from user_settings import get_threshold, set_threshold
 from jobs import create_job, complete_job, fail_job, get_job
 import threading
@@ -178,11 +178,34 @@ class CheckRequest(BaseModel):
     as_of_date: str = "2026-08-30"
 
 
-def _run_check_job(job_id: str, user_id: str, scenario_type: str, as_of_date: str):
+def _compute_data_fingerprint(raw_data: dict) -> str:
+    """A fingerprint of the actual data VALUES -- distinct from
+    signal_id, which identifies who/what the commitment is about, not
+    what today's numbers are. Used to detect genuine changes."""
+    import hashlib
+    canonical = json.dumps(raw_data, sort_keys=True)
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+
+def _run_check_job(job_id: str, user_id: str, scenario_type: str, as_of_date: str, force: bool = False):
     try:
         data_path = DATA_DIR / _SCENARIO_FILES[scenario_type]
         with open(data_path) as f:
             raw_data = json.load(f)
+
+        current_fingerprint = _compute_data_fingerprint(raw_data)
+        last_fingerprint = get_last_fingerprint(user_id, scenario_type)
+
+        if not force and last_fingerprint == current_fingerprint:
+            # Nothing about the underlying data has changed since we
+            # last checked -- skip the AI call entirely, return
+            # whatever's already known for this scenario.
+            existing_cards = [
+                c for c in get_pending_cards_for_user(user_id)
+                if c.get("scenario_type") == scenario_type
+            ]
+            complete_job(job_id, {"cards": existing_cards, "summary_text": "(no change since last check)"})
+            return
 
         user_threshold = get_threshold(user_id)
         result = invoke_agent_for_check(
@@ -195,25 +218,31 @@ def _run_check_job(job_id: str, user_id: str, scenario_type: str, as_of_date: st
 
         frozen_cards = []
         for card in result.get("cards", []):
-            # Force scenario_type to exactly match what was requested,
-            # regardless of what variant label the FM returned (e.g.
-            # "tariff_renewal" instead of "tariff") -- this is what the
-            # frontend's category label mapping depends on.
             card["scenario_type"] = scenario_type
-
             signal_id = card.get("signal_id")
             if not signal_id:
                 frozen_cards.append(card)
                 continue
+
             existing = get_card_by_signal(user_id, signal_id)
-            if existing is not None:
-                if existing.get("status") != "resolved":
-                    existing["scenario_type"] = scenario_type
-                    frozen_cards.append(existing)
+            if existing is not None and existing.get("status") == "resolved":
+                # The data changed since this was resolved -- reopen it,
+                # since we only reach this branch when the fingerprint
+                # genuinely differs from last time.
+                reopen_signal(user_id, signal_id, card)
+                frozen_cards.append(card)
                 continue
+            if existing is not None:
+                # Still pending, but data changed -- overwrite with the
+                # fresh version rather than showing stale frozen numbers.
+                reopen_signal(user_id, signal_id, card)
+                frozen_cards.append(card)
+                continue
+
             record_notification(user_id, signal_id, card)
             frozen_cards.append(card)
 
+        set_last_fingerprint(user_id, scenario_type, current_fingerprint)
         complete_job(job_id, {"cards": frozen_cards, "summary_text": result["full_text"]})
     except Exception as e:
         fail_job(job_id, f"{type(e).__name__}: {e}")
@@ -276,6 +305,7 @@ def _run_reeval_job(job_id: str, user_id: str, scenario_type: str, raw_data: dic
                 continue
             record_notification(user_id, signal_id, card)
             frozen_cards.append(card)
+        set_last_fingerprint(user_id, scenario_type, _compute_data_fingerprint(raw_data))
         complete_job(job_id, {"cards": frozen_cards, "summary_text": result["full_text"]})
     except Exception as e:
         fail_job(job_id, f"{type(e).__name__}: {e}")
