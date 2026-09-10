@@ -215,6 +215,12 @@ class CostComparison(BaseModel):
     total_alternative_cost: float
     net_savings: float
     worth_switching: bool
+    current_upfront_amount: float = 0.0
+    alternative_upfront_amount: float = 0.0
+    upfront_difference: float = 0.0
+    affordability_note: str | None = None  # non-empty when there's a
+        # meaningful upfront cost difference worth flagging to the user
+        # explicitly, separate from whether the total is cheaper
 
 
 class MissingDataRequest(BaseModel):
