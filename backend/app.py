@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -29,6 +30,8 @@ from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal
 from user_settings import get_threshold, set_threshold
+import gmail_auth
+from gmail_reader import fetch_recent_emails, extract_signal_from_email
 from jobs import create_job, complete_job, fail_job, get_job
 import threading
 from fastapi import UploadFile, File, Form
@@ -384,6 +387,64 @@ async def upload_document(
     )
     thread.start()
     return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/gmail/connect")
+def gmail_connect(user_id: str = Depends(require_user)):
+    """Returns the Google consent URL for the frontend to redirect to."""
+    url = gmail_auth.build_authorization_url(user_id)
+    return {"authorization_url": url}
+
+
+@app.get("/gmail/callback")
+def gmail_callback(code: str, state: str):
+    """Google redirects here after the user grants (or denies) consent.
+    state carries the user_id we passed in originally."""
+    try:
+        tokens = gmail_auth.exchange_code_for_tokens(code)
+        refresh_token = tokens.get("refresh_token")
+        if not refresh_token:
+            return HTMLResponse(
+                "<h2>Connection failed</h2><p>No refresh token received -- "
+                "this can happen if you've connected before. Try disconnecting "
+                "in your Google Account permissions and reconnecting.</p>"
+            )
+        gmail_auth.store_refresh_token(state, refresh_token)
+        return HTMLResponse(
+            "<h2>Gmail connected successfully</h2>"
+            "<p>You can close this tab and return to AgentNick.</p>"
+        )
+    except Exception as e:
+        return HTMLResponse(f"<h2>Connection failed</h2><p>{e}</p>")
+
+
+@app.get("/gmail/status")
+def gmail_status(user_id: str = Depends(require_user)):
+    return {"connected": gmail_auth.is_connected(user_id)}
+
+
+@app.post("/gmail/check")
+def gmail_check(scenario_type: str, user_id: str = Depends(require_user)):
+    """Real Gmail read: fetches recent emails and extracts financial
+    signal fields from them via the same Bedrock extraction already
+    proven with document uploads."""
+    if not gmail_auth.is_connected(user_id):
+        raise HTTPException(status_code=400, detail="Gmail not connected for this user")
+
+    emails = fetch_recent_emails(user_id)
+    if not emails:
+        return {"emails_scanned": 0, "extracted": []}
+
+    results = []
+    for email in emails[:5]:  # cap to keep this demo-fast
+        try:
+            extracted = extract_signal_from_email(email, scenario_type)
+            if any(v is not None for v in extracted.values()):
+                results.append({"subject": email["subject"], "extracted_fields": extracted})
+        except Exception:
+            continue
+
+    return {"emails_scanned": len(emails), "extracted": results}
 
 
 @app.get("/pending-cards")
