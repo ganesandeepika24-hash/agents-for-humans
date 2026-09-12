@@ -40,7 +40,10 @@ app = FastAPI(title="AgentNick Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: scope to the real frontend origin once finalized
+    allow_origins=[
+        "https://agentnick-finance-guard.lovable.app",
+        "https://216706d1-83bc-42ab-8d3b-41ca4db307c9.lovableproject.com",  # Lovable editor/preview
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )

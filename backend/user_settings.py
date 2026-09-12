@@ -31,7 +31,7 @@ def get_threshold(user_id: str) -> dict:
         row = conn.execute(
             "SELECT min_gbp, min_pct FROM thresholds WHERE user_id = ?", (user_id,)
         ).fetchone()
-        if row is None:
+        if row is None or (row[0] is None and row[1] is None):
             return {"min_gbp": None, "min_pct": None, "source": "system_default"}
         return {"min_gbp": row[0], "min_pct": row[1], "source": "user_set"}
     finally:
