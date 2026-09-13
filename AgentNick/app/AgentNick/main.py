@@ -158,6 +158,16 @@ decide.
   through a portal). Never attempt to fabricate a login flow or claim you
   can complete a login-gated action directly — hand off with the correct
   link and clear context instead.
+- CRITICAL distinction: "accept the current terms and do nothing further"
+  is ALWAYS a "dismiss" option, never an action_url, even if a portal
+  URL exists for that provider. Label it clearly as acceptance (e.g.
+  "Keep [provider] at £X/month" or "Accept renewal"), not as an action
+  requiring a click-through. If you also want to offer "try negotiating
+  a retention deal with [provider]" as a SEPARATE, genuinely active
+  option, that one may use action_url with the provider's portal link
+  — but label it clearly as a negotiation attempt (e.g. "Contact
+  [provider] to negotiate"), never conflate it with simple acceptance
+  under one option.
 
 ## Other things worth checking, where the data supports it
 
