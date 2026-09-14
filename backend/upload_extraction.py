@@ -21,6 +21,7 @@ _FIELD_SCHEMAS = {
     "card_promo": {
         "standard_apr_pct": "The standard/regular purchase APR percentage that applies after the promo ends, as a number",
         "balance_transfer_offers": "Any balance transfer offers mentioned, as a list of objects with provider, promo_apr_pct, promo_duration_months, transfer_fee_pct",
+        "renewal_price_gbp": "Any retention/loyalty offer price mentioned directly in the email, as a number, if present",
     },
     "card_promo_incomplete": {
         "standard_apr_pct": "The standard/regular purchase APR percentage that applies after the promo ends, as a number",
@@ -34,7 +35,47 @@ _FIELD_SCHEMAS = {
         "auto_bill_amount_gbp": "The amount that will be charged once the trial ends, as a number",
         "cancellation_deadline": "The date by which cancellation must happen, in YYYY-MM-DD format",
     },
+    "insurance": {
+        "renewal_price_gbp": "The renewal premium amount, as a number",
+        "current_price_gbp": "The current/expiring premium amount, as a number",
+        "renewal_date": "The renewal date, in YYYY-MM-DD format",
+    },
+    "membership": {
+        "renewal_price_gbp": "The renewal price for the membership/subscription, as a number",
+        "current_price_gbp": "The current price, as a number",
+        "renewal_date": "The renewal or next-billing date, in YYYY-MM-DD format",
+    },
 }
+
+# Categories the classifier can choose from -- genuinely broader than
+# just our three original demo scenarios, matching the real-world
+# category breakdown discussed for this product.
+CATEGORIES = ["tariff", "trial", "card_promo", "insurance", "membership", "none"]
+
+
+def classify_email(email_text: str) -> str:
+    """First pass: what category (if any) does this email belong to?
+    Returns one of CATEGORIES, or 'none' if it's not a relevant
+    financial/contract signal at all."""
+    prompt = (
+        f"Read this email and classify it into EXACTLY ONE of these categories:\n"
+        f"- tariff: broadband/mobile/utility contract renewal or price change\n"
+        f"- trial: free trial ending or converting to paid subscription\n"
+        f"- card_promo: credit card promotional/0%% rate ending\n"
+        f"- insurance: insurance policy renewal\n"
+        f"- membership: gym, streaming, or other recurring membership/subscription renewal\n"
+        f"- none: not relevant to any of the above\n\n"
+        f"Respond with ONLY the single category word, nothing else.\n\n"
+        f"Email:\n{email_text[:3000]}"
+    )
+    client = boto3.client("bedrock-runtime", region_name="eu-central-1", config=_BOTO_CONFIG)
+    response = client.converse(
+        modelId=MODEL_ID,
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": 20, "temperature": 0},
+    )
+    result = response["output"]["message"]["content"][0]["text"].strip().lower()
+    return result if result in CATEGORIES else "none"
 
 
 def extract_fields_via_bedrock(file_bytes: bytes, media_type: str, scenario_type: str) -> dict:

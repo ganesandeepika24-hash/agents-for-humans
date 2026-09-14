@@ -33,6 +33,7 @@ from user_settings import get_threshold, set_threshold
 from user_data import get_user_data, has_user_data, enable_example_scenario, set_user_data, has_user_data, enable_example_scenario
 import gmail_auth
 from gmail_reader import fetch_recent_emails, extract_signal_from_email
+from upload_extraction import classify_email
 from jobs import create_job, complete_job, fail_job, get_job
 import threading
 from fastapi import UploadFile, File, Form
@@ -464,52 +465,57 @@ def gmail_status(user_id: str = Depends(require_user)):
 
 
 @app.post("/gmail/check")
-def gmail_check(scenario_type: str, user_id: str = Depends(require_user)):
-    """Real Gmail read: fetches recent emails, extracts fields, merges
-    onto this user's scenario data (creating it if it doesn't exist
-    yet), then runs the FULL real evaluation pipeline -- this actually
-    creates a real card, not just a preview of extracted fields."""
+def gmail_check(user_id: str = Depends(require_user)):
+    """Real Gmail read: scans recent emails, CLASSIFIES each one into
+    whichever real-world category it actually belongs to (not limited
+    to a single pre-specified type), extracts fields per category,
+    merges onto that category's scenario data, and runs a real
+    evaluation for every category that had genuine matches -- all in
+    one call, no scenario_type parameter needed."""
     if not gmail_auth.is_connected(user_id):
         raise HTTPException(status_code=400, detail="Gmail not connected for this user")
-    if scenario_type not in _SCENARIO_FILES:
-        raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {scenario_type}")
 
     emails = fetch_recent_emails(user_id)
     if not emails:
-        return {"emails_scanned": 0, "extracted": [], "job_id": None}
+        return {"emails_scanned": 0, "categories_found": [], "job_ids": {}}
 
-    merged_extracted = {}
-    matched_subjects = []
-    for email in emails[:5]:
+    by_category = {}
+    for email in emails[:8]:
+        email_text = f"Subject: {email['subject']}\n\n{email['body']}"
         try:
-            extracted = extract_signal_from_email(email, scenario_type)
+            category = classify_email(email_text)
+        except Exception:
+            continue
+        if category == "none" or category not in _SCENARIO_FILES:
+            continue
+        try:
+            extracted = extract_signal_from_email(email, category)
             real_fields = {k: v for k, v in extracted.items() if v is not None}
             if real_fields:
-                merged_extracted.update(real_fields)
-                matched_subjects.append(email["subject"])
+                by_category.setdefault(category, {}).update(real_fields)
         except Exception:
             continue
 
-    if not merged_extracted:
-        return {"emails_scanned": len(emails), "extracted": [], "job_id": None}
+    job_ids = {}
+    for category, merged_extracted in by_category.items():
+        existing = get_user_data(user_id, category) or {}
+        template_path = DATA_DIR / _SCENARIO_FILES[category]
+        with open(template_path) as f:
+            base = json.load(f)
+        raw_data = {**base, **existing, **merged_extracted}
+        raw_data["user_id"] = user_id
+        set_user_data(user_id, category, raw_data)
 
-    existing = get_user_data(user_id, scenario_type) or {}
-    template_path = DATA_DIR / _SCENARIO_FILES[scenario_type]
-    with open(template_path) as f:
-        base = json.load(f)
-    raw_data = {**base, **existing, **merged_extracted}
-    raw_data["user_id"] = user_id
-    set_user_data(user_id, scenario_type, raw_data)
+        job_id = create_job()
+        thread = threading.Thread(
+            target=_run_reeval_job,
+            args=(job_id, user_id, category, raw_data, "2026-08-30"),
+            daemon=True,
+        )
+        thread.start()
+        job_ids[category] = job_id
 
-    job_id = create_job()
-    thread = threading.Thread(
-        target=_run_reeval_job,
-        args=(job_id, user_id, scenario_type, raw_data, "2026-08-30"),
-        daemon=True,
-    )
-    thread.start()
-
-    return {"emails_scanned": len(emails), "matched_subjects": matched_subjects, "job_id": job_id}
+    return {"emails_scanned": len(emails), "categories_found": list(by_category.keys()), "job_ids": job_ids}
 
 
 @app.post("/settings/try-example/{scenario_type}")
