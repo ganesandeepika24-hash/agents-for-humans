@@ -30,7 +30,7 @@ from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal
 from user_settings import get_threshold, set_threshold
-from user_data import get_user_data
+from user_data import get_user_data, has_user_data, enable_example_scenario, has_user_data, enable_example_scenario
 import gmail_auth
 from gmail_reader import fetch_recent_emails, extract_signal_from_email
 from jobs import create_job, complete_job, fail_job, get_job
@@ -213,6 +213,20 @@ def _compute_data_fingerprint(raw_data: dict) -> str:
 
 def _run_check_job(job_id: str, user_id: str, scenario_type: str, as_of_date: str, force: bool = False):
     try:
+        if not has_user_data(user_id, scenario_type):
+            # No real or example data for this scenario yet -- correct
+            # real-world behavior is to return nothing, not fabricate
+            # example content the user never asked for.
+            complete_job(job_id, {"cards": [], "summary_text": "No data available for this scenario yet."})
+            return
+
+        if not has_user_data(user_id, scenario_type):
+            # No real or example data for this scenario yet -- correct
+            # real-world behavior is to return nothing, not fabricate
+            # example content the user never asked for.
+            complete_job(job_id, {"cards": [], "summary_text": "No data available for this scenario yet."})
+            return
+
         raw_data = get_user_data(user_id, scenario_type)
 
         current_fingerprint = _compute_data_fingerprint(raw_data)
@@ -470,6 +484,26 @@ def gmail_check(scenario_type: str, user_id: str = Depends(require_user)):
             continue
 
     return {"emails_scanned": len(emails), "extracted": results}
+
+
+@app.post("/settings/try-example/{scenario_type}")
+def try_example_scenario(scenario_type: str, user_id: str = Depends(require_user)):
+    """Explicit user action: 'show me an example of what AgentNick
+    would flag' -- the only way example/template data gets created."""
+    if scenario_type not in _SCENARIO_FILES:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {scenario_type}")
+    enable_example_scenario(user_id, scenario_type)
+    return {"status": "enabled", "scenario_type": scenario_type}
+
+
+@app.post("/settings/try-example/{scenario_type}")
+def try_example_scenario(scenario_type: str, user_id: str = Depends(require_user)):
+    """Explicit user action: 'show me an example of what AgentNick
+    would flag' -- the only way example/template data gets created."""
+    if scenario_type not in _SCENARIO_FILES:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {scenario_type}")
+    enable_example_scenario(user_id, scenario_type)
+    return {"status": "enabled", "scenario_type": scenario_type}
 
 
 @app.get("/pending-cards")
