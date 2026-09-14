@@ -32,7 +32,8 @@ from cards import record_notification, mark_resolved, get_pending_cards_for_user
 from user_settings import get_threshold, set_threshold
 from user_data import get_user_data, has_user_data, enable_example_scenario, set_user_data, has_user_data, enable_example_scenario
 import gmail_auth
-from gmail_reader import fetch_recent_emails, extract_signal_from_email
+from gmail_reader import fetch_recent_emails, extract_signal_from_email, fetch_receipt_history, group_emails_by_sender_domain
+from upload_extraction import infer_recurring_pattern
 from upload_extraction import classify_email
 from jobs import create_job, complete_job, fail_job, get_job
 import threading
@@ -518,6 +519,50 @@ def gmail_check(user_id: str = Depends(require_user)):
         job_ids[category] = job_id
 
     return {"emails_scanned": len(emails), "categories_found": list(by_category.keys()), "job_ids": job_ids}
+
+
+@app.post("/gmail/detect-recurring")
+def gmail_detect_recurring(user_id: str = Depends(require_user)):
+    """Scans a longer email history for receipt/payment-confirmation
+    patterns, groups by sender, and asks Claude to infer recurring
+    billing cycles and predict the next charge date -- surfaces
+    subscriptions the user may have forgotten about, even without an
+    explicit 'renewal notice' email ever being sent."""
+    if not gmail_auth.is_connected(user_id):
+        raise HTTPException(status_code=400, detail="Gmail not connected for this user")
+
+    emails = fetch_receipt_history(user_id)
+    if not emails:
+        return {"emails_scanned": 0, "patterns_found": []}
+
+    groups = group_emails_by_sender_domain(emails)
+    patterns_found = []
+    for subject_key, group_emails in groups.items():
+        if len(group_emails) < 2:
+            continue
+        try:
+            pattern = infer_recurring_pattern(group_emails)
+        except Exception:
+            continue
+        if pattern:
+            patterns_found.append(pattern)
+            # Surface as a membership-type scenario if a next charge
+            # date was predicted
+            if pattern.get("predicted_next_charge_date"):
+                existing = get_user_data(user_id, "membership") or {}
+                template_path = DATA_DIR / _SCENARIO_FILES["membership"]
+                with open(template_path) as f:
+                    base = json.load(f)
+                raw_data = {**base, **existing,
+                    "provider": pattern.get("provider", base.get("provider")),
+                    "current_price_gbp": pattern.get("amount_gbp", base.get("current_price_gbp")),
+                    "renewal_price_gbp": pattern.get("amount_gbp", base.get("renewal_price_gbp")),
+                    "renewal_date": pattern.get("predicted_next_charge_date"),
+                    "user_id": user_id,
+                }
+                set_user_data(user_id, "membership", raw_data)
+
+    return {"emails_scanned": len(emails), "patterns_found": patterns_found}
 
 
 @app.post("/settings/try-example/{scenario_type}")

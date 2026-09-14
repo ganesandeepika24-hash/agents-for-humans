@@ -119,3 +119,48 @@ def extract_fields_via_bedrock(file_bytes: bytes, media_type: str, scenario_type
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ValueError(f"Model did not return valid JSON: {raw_text}") from e
+
+
+def infer_recurring_pattern(emails):
+    """Given 2+ emails that appear to be from the same recurring
+    service (grouped by similar subject), asks Claude to infer the
+    billing cycle and predict the next charge date -- even though no
+    single email explicitly states a future renewal date. This is
+    genuinely different from single-email field extraction: it
+    reasons about a PATTERN across multiple historical data points."""
+    if len(emails) < 2:
+        return None
+
+    parts = []
+    for i, e in enumerate(emails[:6]):
+        parts.append("Email " + str(i + 1) + ":\nSubject: " + e["subject"] + "\n" + e["body"][:1000])
+    combined = "\n\n---\n\n".join(parts)
+
+    prompt = (
+        "These emails appear to be recurring receipts/payment confirmations "
+        "from the same service. Based on the dates and amounts mentioned, "
+        "determine: (1) the service/provider name, (2) the amount charged "
+        "each time as a number, (3) the billing frequency, (4) the most "
+        "recent charge date you can identify, (5) your best estimate of "
+        "the NEXT charge date in YYYY-MM-DD format, based on the pattern. "
+        "If you cannot confidently determine a recurring pattern, respond "
+        "with exactly: {\"pattern_found\": false}\n\n"
+        "Otherwise respond ONLY with JSON: {\"pattern_found\": true, "
+        "\"provider\": \"...\", \"amount_gbp\": 0.0, \"frequency\": \"monthly\", "
+        "\"last_charge_date\": \"YYYY-MM-DD\", \"predicted_next_charge_date\": \"YYYY-MM-DD\"}\n\n"
+        + combined
+    )
+
+    client = boto3.client("bedrock-runtime", region_name="eu-central-1", config=_BOTO_CONFIG)
+    response = client.converse(
+        modelId=MODEL_ID,
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": 300, "temperature": 0},
+    )
+    raw_text = response["output"]["message"]["content"][0]["text"].strip()
+    cleaned = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    try:
+        result = json.loads(cleaned)
+        return result if result.get("pattern_found") else None
+    except json.JSONDecodeError:
+        return None
