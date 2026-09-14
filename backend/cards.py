@@ -13,8 +13,12 @@ work correctly per-user and across process restarts.
 
 import sqlite3
 import json
+import os
 from pathlib import Path
 from datetime import datetime
+from cryptography.fernet import Fernet
+
+_fernet = Fernet(os.environ['EMAIL_ENCRYPTION_KEY'].encode())
 
 _DB_PATH = Path(__file__).parent / "cards.db"
 
@@ -63,7 +67,7 @@ def record_notification(user_id: str, signal_id: str, card: dict):
                 (user_id, signal_id, card_json, first_notified_at, status)
             VALUES (?, ?, ?, ?, 'pending')
             """,
-            (user_id, signal_id, json.dumps(card), datetime.utcnow().isoformat()),
+            (user_id, signal_id, _fernet.encrypt(json.dumps(card).encode()).decode(), datetime.utcnow().isoformat()),
         )
         conn.commit()
     finally:
@@ -161,7 +165,7 @@ def reopen_signal(user_id: str, signal_id: str, card: dict):
             ON CONFLICT(user_id, signal_id) DO UPDATE SET
                 card_json = excluded.card_json,
                 status = 'pending'
-        """, (user_id, signal_id, json.dumps(card), datetime.utcnow().isoformat()))
+        """, (user_id, signal_id, _fernet.encrypt(json.dumps(card).encode()).decode(), datetime.utcnow().isoformat()))
         conn.commit()
     finally:
         conn.close()
@@ -176,7 +180,7 @@ def get_card_by_signal(user_id: str, signal_id: str) -> dict | None:
         ).fetchone()
         if row is None:
             return None
-        card = json.loads(row[0])
+        card = json.loads(_fernet.decrypt(row[0].encode()).decode())
         card["status"] = row[1]
         return card
     finally:
@@ -190,6 +194,6 @@ def get_pending_cards_for_user(user_id: str) -> list[dict]:
             "SELECT card_json FROM notified_signals WHERE user_id = ? AND status = 'pending'",
             (user_id,),
         ).fetchall()
-        return [json.loads(r[0]) for r in rows]
+        return [json.loads(_fernet.decrypt(r[0].encode()).decode()) for r in rows]
     finally:
         conn.close()

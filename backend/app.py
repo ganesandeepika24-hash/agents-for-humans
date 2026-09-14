@@ -437,6 +437,12 @@ def gmail_callback(code: str, state: str):
         return HTMLResponse(f"<h2>Connection failed</h2><p>{e}</p>")
 
 
+@app.post("/gmail/disconnect")
+def gmail_disconnect(user_id: str = Depends(require_user)):
+    gmail_auth.disconnect(user_id)
+    return {"status": "disconnected"}
+
+
 @app.get("/gmail/status")
 def gmail_status(user_id: str = Depends(require_user)):
     return {"connected": gmail_auth.is_connected(user_id)}

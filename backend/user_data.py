@@ -6,8 +6,11 @@ raw_data for each scenario_type, seeded from the shared mock template
 on first access.
 """
 
-import sqlite3, json
+import sqlite3, json, os
 from pathlib import Path
+from cryptography.fernet import Fernet
+
+_fernet = Fernet(os.environ['EMAIL_ENCRYPTION_KEY'].encode())
 
 _DB_PATH = Path(__file__).parent / "user_data.db"
 _TEMPLATE_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
@@ -32,14 +35,14 @@ def get_user_data(user_id: str, scenario_type: str) -> dict:
             "SELECT data_json FROM user_scenario_data WHERE user_id = ? AND scenario_type = ?",
             (user_id, scenario_type)).fetchone()
         if row:
-            return json.loads(row[0])
+            return json.loads(_fernet.decrypt(row[0].encode()).decode())
         template_path = _TEMPLATE_DIR / _SCENARIO_FILES[scenario_type]
         with open(template_path) as f:
             data = json.load(f)
         data["user_id"] = user_id
         conn.execute(
             "INSERT INTO user_scenario_data (user_id, scenario_type, data_json) VALUES (?, ?, ?)",
-            (user_id, scenario_type, json.dumps(data)))
+            (user_id, scenario_type, _fernet.encrypt(json.dumps(data).encode()).decode()))
         conn.commit()
         return data
     finally:
@@ -51,7 +54,7 @@ def set_user_data(user_id: str, scenario_type: str, data: dict):
     try:
         conn.execute("""INSERT INTO user_scenario_data (user_id, scenario_type, data_json)
             VALUES (?, ?, ?) ON CONFLICT(user_id, scenario_type) DO UPDATE SET data_json = excluded.data_json""",
-            (user_id, scenario_type, json.dumps(data)))
+            (user_id, scenario_type, _fernet.encrypt(json.dumps(data).encode()).decode()))
         conn.commit()
     finally:
         conn.close()

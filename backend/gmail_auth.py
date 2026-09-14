@@ -103,3 +103,12 @@ def get_access_token(user_id: str) -> str | None:
     if response.status_code != 200:
         return None
     return response.json().get("access_token")
+
+
+def disconnect(user_id: str):
+    conn = _get_connection()
+    try:
+        conn.execute("DELETE FROM gmail_tokens WHERE user_id = ?", (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
