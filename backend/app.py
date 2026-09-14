@@ -562,6 +562,14 @@ def gmail_detect_recurring(user_id: str = Depends(require_user)):
                 }
                 set_user_data(user_id, "membership", raw_data)
 
+                job_id = create_job()
+                thread = threading.Thread(
+                    target=_run_reeval_job,
+                    args=(job_id, user_id, "membership", raw_data, "2026-09-14"),
+                    daemon=True,
+                )
+                thread.start()
+
     return {"emails_scanned": len(emails), "patterns_found": patterns_found}
 
 
