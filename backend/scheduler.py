@@ -21,6 +21,8 @@ from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
 from push_notifications import send_push_to_user
 from users import list_all_user_ids
+from gmail_auth import is_connected as gmail_is_connected
+from gmail_reader import fetch_recent_emails, extract_signal_from_email
 from cards import (
     record_notification, get_card_by_signal, reopen_signal,
     get_last_fingerprint, set_last_fingerprint,
@@ -116,6 +118,59 @@ def run_scheduled_check():
                 new_or_changed_cards.append(card)
 
             set_last_fingerprint(user_id, scenario_type, current_fp)
+
+        # If this user has connected Gmail, also check their real
+        # inbox for financial signals -- genuinely automatic, no manual
+        # /gmail/check call needed.
+        if gmail_is_connected(user_id):
+            try:
+                emails = fetch_recent_emails(user_id)
+                for email in emails[:5]:
+                    for scenario_type in _SCENARIO_FILES.keys():
+                        try:
+                            extracted = extract_signal_from_email(email, scenario_type)
+                        except Exception:
+                            continue
+                        if not any(v is not None for v in extracted.values()):
+                            continue
+                        # Merge extracted fields onto the relevant mock
+                        # baseline so we have a complete-enough record to
+                        # evaluate (same merge pattern as /submit-data).
+                        data_path = DATA_DIR / _SCENARIO_FILES[scenario_type]
+                        with open(data_path) as f:
+                            raw_data = json.load(f)
+                        raw_data.update({k: v for k, v in extracted.items() if v is not None})
+
+                        current_fp = _fingerprint(raw_data)
+                        gmail_scenario_key = f"gmail_{scenario_type}"
+                        last_fp = get_last_fingerprint(user_id, gmail_scenario_key)
+                        if last_fp == current_fp:
+                            continue
+
+                        try:
+                            result = invoke_agent_for_check(
+                                scenario_type=scenario_type, raw_data=raw_data, as_of_date="2026-08-30",
+                            )
+                        except Exception as e:
+                            print(f"[scheduler] Gmail-derived check error for {user_id}: {e}")
+                            continue
+
+                        for card in result.get("cards", []):
+                            card["scenario_type"] = scenario_type
+                            signal_id = card.get("signal_id")
+                            if not signal_id:
+                                continue
+                            existing = get_card_by_signal(user_id, signal_id)
+                            if existing is not None:
+                                reopen_signal(user_id, signal_id, card)
+                                new_or_changed_cards.append(card)
+                                continue
+                            record_notification(user_id, signal_id, card)
+                            new_or_changed_cards.append(card)
+
+                        set_last_fingerprint(user_id, gmail_scenario_key, current_fp)
+            except Exception as e:
+                print(f"[scheduler] Gmail check failed for {user_id}: {e}")
 
         if new_or_changed_cards:
             _send_digest(user_id, new_or_changed_cards)
