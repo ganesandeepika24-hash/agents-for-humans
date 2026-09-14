@@ -1,0 +1,11 @@
+{
+  "user_id": "demo_user",
+  "provider": "PulseFit Gym",
+  "current_price_gbp": 35.0,
+  "renewal_date": "2026-09-20",
+  "renewal_price_gbp": 45.0,
+  "market_comparable_offers": [
+    {"provider": "FlexGym", "price_gbp": 32.0, "signup_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/flexgym.html"}
+  ],
+  "provider_portal_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/pulsefit-gym.html"
+}

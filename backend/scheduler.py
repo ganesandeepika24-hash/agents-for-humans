@@ -53,6 +53,8 @@ _SCENARIO_FILES = {
     "tariff": "tariffs.json",
     "trial": "trial.json",
     "card_promo": "card_promo.json",
+    "insurance": "insurance.json",
+    "membership": "membership.json",
 }
 
 

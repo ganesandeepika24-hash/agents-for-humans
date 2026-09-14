@@ -1,0 +1,12 @@
+{
+  "user_id": "demo_user",
+  "provider": "Northgate Insurance",
+  "policy_type": "Home Insurance",
+  "current_price_gbp": 240.0,
+  "renewal_date": "2026-10-01",
+  "renewal_price_gbp": 340.0,
+  "market_comparable_offers": [
+    {"provider": "Coverline Direct", "price_gbp": 265.0, "signup_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/coverline-direct.html"}
+  ],
+  "provider_portal_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/northgate-insurance.html"
+}
