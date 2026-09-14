@@ -74,56 +74,14 @@ def _get_connection():
     return conn
 
 
-def request_login_code(email: str) -> str:
-    """Generates a 6-digit code, stores it (expires in 10 min), returns
-    it so the caller can email it. Does NOT issue a session token --
-    that only happens after verify_login_code succeeds. This is what
-    proves the person logging in genuinely controls that inbox,
-    closing the gap where knowing someone's email alone let anyone log
-    in as them."""
-    import random
-    code = f"{random.randint(0, 999999):06d}"
-    lookup = _lookup_fingerprint(email)
+def login(email: str) -> dict:
+    """Create the user if new, always issue a fresh session token."""
     conn = _get_connection()
     try:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS login_codes (
-                email_lookup TEXT PRIMARY KEY, code TEXT NOT NULL,
-                email_encrypted TEXT NOT NULL, created_at TEXT NOT NULL
-            )
-        """)
-        conn.execute("""
-            INSERT INTO login_codes (email_lookup, code, email_encrypted, created_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(email_lookup) DO UPDATE SET code = excluded.code, created_at = excluded.created_at
-        """, (lookup, code, _encrypt_email(email), datetime.utcnow().isoformat()))
-        conn.commit()
-        return code
-    finally:
-        conn.close()
-
-
-def verify_login_code(email: str, code: str) -> dict | None:
-    """Checks the code, and only if correct AND not expired (10 min),
-    creates/finds the user and issues a real session token."""
-    lookup = _lookup_fingerprint(email)
-    conn = _get_connection()
-    try:
-        row = conn.execute(
-            "SELECT code, created_at FROM login_codes WHERE email_lookup = ?", (lookup,)
-        ).fetchone()
-        if row is None or row[0] != code:
-            return None
-
-        created_at = datetime.fromisoformat(row[1])
-        if (datetime.utcnow() - created_at).total_seconds() > 600:
-            return None
-
-        conn.execute("DELETE FROM login_codes WHERE email_lookup = ?", (lookup,))
-
-        user_row = conn.execute("SELECT user_id FROM users WHERE email_lookup = ?", (lookup,)).fetchone()
-        if user_row:
-            user_id = user_row[0]
+        lookup = _lookup_fingerprint(email)
+        row = conn.execute("SELECT user_id FROM users WHERE email_lookup = ?", (lookup,)).fetchone()
+        if row:
+            user_id = row[0]
         else:
             user_id = secrets.token_hex(8)
             conn.execute(
@@ -153,7 +111,7 @@ def get_user_id_from_token(token: str) -> str | None:
 
 def get_email_for_user(user_id: str) -> str | None:
     """Decrypts and returns the real email -- used sparingly, only
-    where genuinely needed (e.g. sending mail), not for casual lookup."""
+    where genuinely needed (e.g. sending mail)."""
     conn = _get_connection()
     try:
         row = conn.execute("SELECT email_encrypted FROM users WHERE user_id = ?", (user_id,)).fetchone()
