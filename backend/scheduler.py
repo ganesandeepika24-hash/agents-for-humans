@@ -21,6 +21,7 @@ from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
 from push_notifications import send_push_to_user
 from users import list_all_user_ids
+from user_data import get_user_data
 from gmail_auth import is_connected as gmail_is_connected
 from gmail_reader import fetch_recent_emails, extract_signal_from_email
 from cards import (
@@ -75,9 +76,7 @@ def run_scheduled_check():
         new_or_changed_cards = []
 
         for scenario_type, filename in _SCENARIO_FILES.items():
-            data_path = DATA_DIR / filename
-            with open(data_path) as f:
-                raw_data = json.load(f)
+            raw_data = get_user_data(user_id, scenario_type)
 
             current_fp = _fingerprint(raw_data)
             last_fp = get_last_fingerprint(user_id, scenario_type)

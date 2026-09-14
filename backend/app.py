@@ -30,6 +30,7 @@ from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal
 from user_settings import get_threshold, set_threshold
+from user_data import get_user_data
 import gmail_auth
 from gmail_reader import fetch_recent_emails, extract_signal_from_email
 from jobs import create_job, complete_job, fail_job, get_job
@@ -204,9 +205,7 @@ def _compute_data_fingerprint(raw_data: dict) -> str:
 
 def _run_check_job(job_id: str, user_id: str, scenario_type: str, as_of_date: str, force: bool = False):
     try:
-        data_path = DATA_DIR / _SCENARIO_FILES[scenario_type]
-        with open(data_path) as f:
-            raw_data = json.load(f)
+        raw_data = get_user_data(user_id, scenario_type)
 
         current_fingerprint = _compute_data_fingerprint(raw_data)
         last_fingerprint = get_last_fingerprint(user_id, scenario_type)
