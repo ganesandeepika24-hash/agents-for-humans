@@ -78,3 +78,56 @@ def set_user_data(user_id: str, scenario_type: str, data: dict):
         conn.commit()
     finally:
         conn.close()
+
+
+def _get_gmail_tracking_connection():
+    conn = sqlite3.connect(_DB_PATH)
+    conn.execute("""CREATE TABLE IF NOT EXISTS gmail_derived_scenarios (
+        user_id TEXT NOT NULL, scenario_type TEXT NOT NULL,
+        PRIMARY KEY (user_id, scenario_type))""")
+    return conn
+
+
+def mark_gmail_derived(user_id: str, scenario_type: str):
+    conn = _get_gmail_tracking_connection()
+    try:
+        conn.execute("INSERT OR IGNORE INTO gmail_derived_scenarios (user_id, scenario_type) VALUES (?, ?)",
+                     (user_id, scenario_type))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_gmail_derived_scenarios(user_id: str) -> list:
+    conn = _get_gmail_tracking_connection()
+    try:
+        rows = conn.execute("SELECT scenario_type FROM gmail_derived_scenarios WHERE user_id = ?", (user_id,)).fetchall()
+        return [r[0] for r in rows]
+    finally:
+        conn.close()
+
+
+def delete_user_data(user_id: str, scenario_type: str):
+    conn = _get_connection()
+    try:
+        conn.execute("DELETE FROM user_scenario_data WHERE user_id = ? AND scenario_type = ?", (user_id, scenario_type))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clear_all_gmail_derived_data(user_id: str) -> list:
+    """Deletes all scenario data that was populated from Gmail for this
+    user, and clears the tracking markers. Returns the list of
+    scenario_types that were cleared, so the caller can also clean up
+    associated cards and fingerprints."""
+    scenario_types = get_gmail_derived_scenarios(user_id)
+    for scenario_type in scenario_types:
+        delete_user_data(user_id, scenario_type)
+    conn = _get_gmail_tracking_connection()
+    try:
+        conn.execute("DELETE FROM gmail_derived_scenarios WHERE user_id = ?", (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return scenario_types

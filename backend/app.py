@@ -30,7 +30,7 @@ from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal
 from user_settings import get_threshold, set_threshold
-from user_data import get_user_data, has_user_data, enable_example_scenario, set_user_data, has_user_data, enable_example_scenario
+from user_data import get_user_data, has_user_data, enable_example_scenario, set_user_data, mark_gmail_derived, clear_all_gmail_derived_data, has_user_data, enable_example_scenario
 import gmail_auth
 from gmail_reader import fetch_recent_emails, extract_signal_from_email, fetch_receipt_history, group_emails_by_sender_domain
 from upload_extraction import infer_recurring_pattern
@@ -459,7 +459,12 @@ def gmail_callback(code: str, state: str):
 @app.post("/gmail/disconnect")
 def gmail_disconnect(user_id: str = Depends(require_user)):
     gmail_auth.disconnect(user_id)
-    return {"status": "disconnected"}
+    cleared_scenarios = clear_all_gmail_derived_data(user_id)
+    for scenario_type in cleared_scenarios:
+        conn_signal_ids = [c["signal_id"] for c in get_pending_cards_for_user(user_id) if c.get("scenario_type") == scenario_type]
+        for signal_id in conn_signal_ids:
+            forget_signal(user_id, signal_id)
+    return {"status": "disconnected", "cleared_scenarios": cleared_scenarios}
 
 
 @app.get("/gmail/status")
@@ -508,6 +513,7 @@ def gmail_check(user_id: str = Depends(require_user)):
         raw_data = {**base, **existing, **merged_extracted}
         raw_data["user_id"] = user_id
         set_user_data(user_id, category, raw_data)
+        mark_gmail_derived(user_id, category)
 
         job_id = create_job()
         thread = threading.Thread(
