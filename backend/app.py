@@ -445,7 +445,8 @@ def gmail_callback(code: str, state: str):
         gmail_auth.store_refresh_token(state, refresh_token)
         return HTMLResponse(
             "<h2>Gmail connected successfully</h2>"
-            "<p>You can close this tab and return to AgentNick.</p>"
+            "<p>This window will close automatically...</p>"
+            "<script>setTimeout(() => { window.close(); }, 1500);</script>"
         )
     except Exception as e:
         return HTMLResponse(f"<h2>Connection failed</h2><p>{e}</p>")
