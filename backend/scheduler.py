@@ -153,7 +153,7 @@ def _send_digest(user_id: str, cards: list[dict]):
             user_id,
             title=card["title"],
             body=body,
-            url="/static/index.html",
+            url=f"https://agentnick-finance-guard.lovable.app/?card={card.get('signal_id', '')}",
             card_id=card.get("card_id"),
             signal_id=card.get("signal_id"),
             actions=actions,
@@ -163,7 +163,7 @@ def _send_digest(user_id: str, cards: list[dict]):
             user_id,
             title=f"AgentNick: {len(cards)} update(s)",
             body=f"{len(cards)} things need your attention",
-            url="/static/index.html",
+            url="https://agentnick-finance-guard.lovable.app/",
         )
 
 

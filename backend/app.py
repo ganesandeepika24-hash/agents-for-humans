@@ -130,7 +130,7 @@ def test_push(user_id: str = Depends(require_user)):
         user_id,
         title="Test: Reelbox trial ending",
         body="Cancel today to avoid a £12.99 charge.",
-        url="/static/index.html",
+        url="https://agentnick-finance-guard.lovable.app/",
         card_id="test-card-id",
         signal_id="test-signal-id-12345",
         actions=[
