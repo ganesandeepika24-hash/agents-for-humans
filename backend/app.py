@@ -126,18 +126,27 @@ def subscribe(subscription: dict, user_id: str = Depends(require_user)):
 
 @app.post("/test-push")
 def test_push(user_id: str = Depends(require_user)):
-    send_push_to_user(
-        user_id,
-        title="Test: Reelbox trial ending",
-        body="Cancel today to avoid a £12.99 charge.",
-        url="https://agentnick-finance-guard.lovable.app/",
-        card_id="test-card-id",
-        signal_id="test-signal-id-12345",
-        actions=[
-            {"action": "dismiss", "title": "Keep Subscription"},
-            {"action": "remind_later", "title": "Remind Me Later"},
-        ],
-    )
+    """Sends a push using a REAL pending card's signal_id if one
+    exists, so the deep-link URL can be genuinely tested end-to-end."""
+    pending = get_pending_cards_for_user(user_id)
+    if pending:
+        card = pending[0]
+        send_push_to_user(
+            user_id,
+            title=card["title"],
+            body=(f"£{card['computed_savings_gbp']:.0f} potential impact"
+                  if card.get("computed_savings_gbp") else "Tap to see details"),
+            url=f"https://agentnick-finance-guard.lovable.app/?card={card['signal_id']}",
+            card_id=card.get("card_id"),
+            signal_id=card["signal_id"],
+        )
+    else:
+        send_push_to_user(
+            user_id,
+            title="AgentNick Test",
+            body="This is a real push notification!",
+            url="https://agentnick-finance-guard.lovable.app/",
+        )
     return {"status": "push_sent"}
 
 
