@@ -48,7 +48,15 @@ def extract_fields_via_bedrock(file_bytes: bytes, media_type: str, scenario_type
         f"If a field cannot be found in the document, use null for that field."
     )
 
-    doc_format = "pdf" if media_type == "application/pdf" else media_type.split("/")[-1]
+    _FORMAT_MAP = {
+        "application/pdf": "pdf", "text/plain": "txt", "text/csv": "csv",
+        "text/html": "html", "text/markdown": "md",
+        "application/msword": "doc",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        "application/vnd.ms-excel": "xls",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    }
+    doc_format = _FORMAT_MAP.get(media_type, "txt")
 
     client = boto3.client("bedrock-runtime", region_name="eu-central-1", config=_BOTO_CONFIG)
     response = client.converse(
