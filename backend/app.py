@@ -30,7 +30,7 @@ from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal
 from user_settings import get_threshold, set_threshold
-from user_data import get_user_data, has_user_data, enable_example_scenario, has_user_data, enable_example_scenario
+from user_data import get_user_data, has_user_data, enable_example_scenario, set_user_data, has_user_data, enable_example_scenario
 import gmail_auth
 from gmail_reader import fetch_recent_emails, extract_signal_from_email
 from jobs import create_job, complete_job, fail_job, get_job
@@ -465,26 +465,51 @@ def gmail_status(user_id: str = Depends(require_user)):
 
 @app.post("/gmail/check")
 def gmail_check(scenario_type: str, user_id: str = Depends(require_user)):
-    """Real Gmail read: fetches recent emails and extracts financial
-    signal fields from them via the same Bedrock extraction already
-    proven with document uploads."""
+    """Real Gmail read: fetches recent emails, extracts fields, merges
+    onto this user's scenario data (creating it if it doesn't exist
+    yet), then runs the FULL real evaluation pipeline -- this actually
+    creates a real card, not just a preview of extracted fields."""
     if not gmail_auth.is_connected(user_id):
         raise HTTPException(status_code=400, detail="Gmail not connected for this user")
+    if scenario_type not in _SCENARIO_FILES:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {scenario_type}")
 
     emails = fetch_recent_emails(user_id)
     if not emails:
-        return {"emails_scanned": 0, "extracted": []}
+        return {"emails_scanned": 0, "extracted": [], "job_id": None}
 
-    results = []
-    for email in emails[:5]:  # cap to keep this demo-fast
+    merged_extracted = {}
+    matched_subjects = []
+    for email in emails[:5]:
         try:
             extracted = extract_signal_from_email(email, scenario_type)
-            if any(v is not None for v in extracted.values()):
-                results.append({"subject": email["subject"], "extracted_fields": extracted})
+            real_fields = {k: v for k, v in extracted.items() if v is not None}
+            if real_fields:
+                merged_extracted.update(real_fields)
+                matched_subjects.append(email["subject"])
         except Exception:
             continue
 
-    return {"emails_scanned": len(emails), "extracted": results}
+    if not merged_extracted:
+        return {"emails_scanned": len(emails), "extracted": [], "job_id": None}
+
+    existing = get_user_data(user_id, scenario_type) or {}
+    template_path = DATA_DIR / _SCENARIO_FILES[scenario_type]
+    with open(template_path) as f:
+        base = json.load(f)
+    raw_data = {**base, **existing, **merged_extracted}
+    raw_data["user_id"] = user_id
+    set_user_data(user_id, scenario_type, raw_data)
+
+    job_id = create_job()
+    thread = threading.Thread(
+        target=_run_reeval_job,
+        args=(job_id, user_id, scenario_type, raw_data, "2026-08-30"),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"emails_scanned": len(emails), "matched_subjects": matched_subjects, "job_id": job_id}
 
 
 @app.post("/settings/try-example/{scenario_type}")
