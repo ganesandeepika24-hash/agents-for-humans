@@ -27,7 +27,7 @@ from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
 from scheduler import start_scheduler, pause as pause_scheduler, resume as resume_scheduler, is_paused
 from push_notifications import add_subscription, send_push_to_user
-from users import login as do_login, get_user_id_from_token
+from users import request_login_code, verify_login_code, get_user_id_from_token
 from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal
 from user_settings import get_threshold, set_threshold
 from user_data import get_user_data
@@ -89,11 +89,32 @@ class LoginRequest(BaseModel):
     email: str
 
 
+class VerifyCodeRequest(BaseModel):
+    email: str
+    code: str
+
+
 @app.post("/login")
 def login(req: LoginRequest):
+    """Step 1: send a 6-digit verification code to this email. Does
+    NOT log the user in -- proves inbox ownership before that happens."""
     if "@" not in req.email:
         raise HTTPException(status_code=400, detail="Invalid email")
-    result = do_login(req.email)
+    code = request_login_code(req.email)
+    send_action_email(
+        to=req.email,
+        subject="Your AgentNick login code",
+        body=f"Your login code is: {code}\n\nThis code expires in 10 minutes.",
+    )
+    return {"status": "code_sent"}
+
+
+@app.post("/verify-code")
+def verify_code(req: VerifyCodeRequest):
+    """Step 2: verify the code, issue a real session token only if correct."""
+    result = verify_login_code(req.email, req.code)
+    if result is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
     return result
 
 
