@@ -25,6 +25,12 @@ _DATE_LIKE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}")
 _NUMERIC_PATTERN = re.compile(r"^-?\d+(\.\d+)?$")
 
 
+_FIXED_IDENTITY_FIELDS = {
+    "tariff": "provider", "card_promo": "provider", "card_promo_incomplete": "provider",
+    "insurance": "provider", "membership": "provider", "trial": "service",
+}
+
+
 @tool
 def parse_financial_signals(
     source_type: str,
@@ -35,6 +41,12 @@ def parse_financial_signals(
     user_id_field: str = "user_id",
     as_of_date: str | None = None,
 ) -> FinancialSignal:
+    # Override whatever the FM chose with a fixed, known-correct field
+    # per scenario type -- removes non-determinism that was producing
+    # two different signal_ids for the same real-world commitment
+    # across separate evaluations of the same underlying situation.
+    if source_type in _FIXED_IDENTITY_FIELDS and _FIXED_IDENTITY_FIELDS[source_type] in raw_data:
+        identity_field = _FIXED_IDENTITY_FIELDS[source_type]
     """
     Normalize a raw financial record into a FinancialSignal.
 

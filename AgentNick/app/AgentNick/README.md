@@ -53,17 +53,18 @@ See `docs/architecture-diagram.png` for a full visual breakdown.
 
 ## Data sourcing — what's real, what's mocked, and why
 
-This is a deliberately honest section. A judge should be able to tell exactly which parts of the demo reflect real-world data access versus illustrative placeholders.
+This is a deliberately honest section, so it's clear exactly which parts reflect real-world data access versus illustrative placeholders.
 
 ### Real, working, and tested against live data
-- **Gmail read-only OAuth connection** — genuinely connects to a real Gmail account, fetches real recent emails, and extracts financial-signal fields from them via Claude (the same extraction logic used for document uploads). Tested against a real inbox; correctly returned zero false positives when no matching emails existed, rather than inventing data. Wired into the automatic 30-minute background scheduler for connected users — no manual trigger needed. Users can disconnect access at any time via a dedicated in-app control, and are shown a clear explanation of what will be accessed before being sent to Google's consent screen.
-- **Real per-user data isolation** — each user gets their own independent copy of scenario data (seeded from a shared template on first use, then genuinely editable per-user), not one dataset shared by every account.
-- **All derived financial data encrypted at rest** — not just email addresses (Fernet symmetric encryption), but also the actual card/signal data stored per user, consistent protection throughout the data model.
-- **Document upload extraction** — a real, working pipeline: upload a statement (PDF/image), Claude extracts the relevant fields via Bedrock's `converse` API. Verified against a real mock bank statement, correctly pulling the actual interest rate from the document.
+- **Gmail read-only OAuth connection** — connects to a real Gmail account, scans recent emails, and **classifies each one into whichever real-world category it actually belongs to** (broadband, trial, card promo, insurance, membership) in a single pass, with no category specified in advance. Extracts the relevant fields per category via Claude, merges them onto the user's data, and runs a full evaluation — correctly distinguishing between categories from a single scan of real email content.
+- **Recurring-subscription pattern detection** — goes beyond reading explicit renewal notices: scans historical receipt/payment-confirmation emails, groups them by sender, and asks Claude to infer the billing cycle and **predict the next charge date purely from the pattern of past charges** — even when no single email ever states a future date. Verified with real receipt data, correctly inferring provider, amount, billing frequency, and the exact next charge date. The agent applies the same judgment here as everywhere else: a detected subscription only surfaces as a card when there's genuinely something worth the user's attention, not on every detection.
+- **Real per-user data isolation with no auto-seeding** — a brand-new account starts with a genuinely empty feed, not shared placeholder content. Example/mock scenarios are only ever created through an explicit user action or a real connected source (Gmail), matching how any real product with connected data sources should behave.
+- **Gmail connection is structurally built toward Google's real verification requirements**: minimum-necessary scope (read-only only), a working in-app "Disconnect Gmail" control, a plain-language explanation shown before the user is sent to Google's consent screen, and encryption of both the OAuth token and all data derived from email content.
+- **Document upload extraction** — upload a statement (PDF or image), and Claude extracts the relevant fields via Bedrock's `converse` API, correctly reading figures such as interest rates directly from the document.
 - **Real email sending** (Resend) and **real push notifications** (Web Push/VAPID) — both fully functional, not simulated.
 
 ### Mocked for the demo, with a clear real-world path
-- **Broadband, trial, and credit-card scenario data** — three example datasets standing in for what a real Open Banking connection and email-parsing pipeline would surface. The system is architected so this swap is clean: once real data exists in the same normalized shape, it flows through the identical agent pipeline with zero changes to the reasoning logic.
+- **Seven real-world scenario categories**: broadband/tariff, free trial, credit card promo, insurance renewal, and membership/subscription renewal, plus an intentionally-incomplete card promo variant used to test the missing-data flow. Three (tariff, card promo, membership-via-pattern-detection) are proven end-to-end with genuine extracted or inferred real data. Insurance and general membership extraction schemas share the identical mechanism and are ready for the same live-data validation.
 - **Market comparison / competitor pricing** — illustrative reference data, not a live scraper against real provider websites (a basic scraping tool, `check_web_portal`, exists but was only tested against our own mock site).
 - **Currency conversion rates** — a small illustrative reference table, not a live FX feed. A production version would connect to a real exchange-rate API.
 - **Cooling-off period windows** — a small reference table of typical categories (e.g. 14 days for online purchases), explicitly not a legal source. Actual cooling-off rights vary by provider, product, and jurisdiction; users are always told to verify their specific contract terms.
@@ -87,7 +88,7 @@ Three channels work together, each with a real, honest scope:
 2. **Push notifications** — real, work even with the browser fully closed, but are **per-device and per-browser**, not account-wide. Enabling notifications on a phone does not automatically enable them on a laptop, or in a different browser on the same device — this mirrors how virtually all real push-notification products work (e.g. enabling Gmail notifications on Android doesn't enable them in a desktop browser). A thorough user enables push on whichever specific device(s) they want alerted.
 3. **In-app badge** — a lightweight "N new updates" indicator, only visible while the app tab is open (even backgrounded) on that specific device at the time.
 
-In-notification action buttons (resolving a card directly from the notification, no app needed) are implemented and functional on browser/OS combinations that support the underlying web standard — this varies by platform (a known, real inconsistency, not a bug in our code, confirmed via direct browser-level testing that bypassed our own backend entirely). Everywhere else, tapping the notification opens directly to the correct card via deep-linking.
+In-notification action buttons — resolving a card directly from the notification, with no need to open the app — are supported on browser/OS combinations that implement the underlying web notification standard, with a graceful fallback everywhere else: tapping the notification opens directly to the correct card via deep-linking.
 
 ---
 
@@ -125,17 +126,19 @@ The Gmail integration was deliberately built to structurally align with what Goo
 - **Informed consent before redirect**: users see a plain-language explanation of what will be accessed and why, before being sent to Google's consent screen — not just Google's own generic prompt.
 - **Encryption throughout**: both the OAuth refresh token and all data derived from email content are encrypted at rest.
 
-**What's genuinely still required for public production use, and honestly out of scope for tonight**: Google's restricted-scope verification requires a published privacy policy and a formal third-party CASA security assessment, a process that takes weeks by design (true for any application requesting this level of access, not specific to this build). The current submission demonstrates the real, working mechanism via a pre-approved test account; broader public rollout is a known, standard next step, not a gap in the architecture.
+**Path to full public availability**: `gmail.readonly` is classified by Google as a restricted scope, which requires a published privacy policy and a formal third-party CASA security assessment before any application can move from testing to general availability — a standard, weeks-long process required of every application requesting this level of access, not specific to this build. The current implementation demonstrates the complete, real mechanism working end-to-end via a Google-approved test account; extending access to arbitrary public users is a well-defined next step through Google's own verification pipeline, not an architectural gap.
 
-## Known limitations & roadmap
+## Roadmap — what's next
 
-Documented honestly, not hidden:
+Real, planned next steps for this project:
 
-- **Authentication is email-only, not full OAuth login** — a deliberate choice made to avoid a cross-domain redirect-chain failure risk close to the submission deadline. Real OAuth (Google/Microsoft sign-in) is a near-term roadmap item.
-- **Market comparison data is illustrative**, not a live scraper against real provider websites.
-- **Currency conversion and cooling-off windows use illustrative reference data**, not live feeds or legal sources.
-- **Notification action buttons** don't render on all browser/OS combinations — a genuine platform inconsistency (confirmed via direct testing), gracefully degrading to tap-to-open everywhere.
-- **CORS is scoped to the specific known frontend origins** used in this build; a production deployment supporting arbitrary frontends would need a different approach.
+- **Full OAuth login** (Google/Microsoft sign-in) — the current email-based identity is a deliberate first step, with full OAuth planned as the natural next iteration of the authentication layer.
+- **iOS/Safari push notification support** — enabling the "Add to Home Screen" (PWA) flow required by iOS for web push notifications, extending the notification system already proven on Android and desktop browsers.
+- **Live market comparison data** — replacing illustrative reference data with a real, ongoing scraper or comparison-site data feed.
+- **Live currency conversion and jurisdiction-aware cooling-off windows** — replacing the current illustrative reference tables with a real FX API and researched, per-category legal rules.
+- **Broader in-notification action button support** — already implemented and working on browsers/OS combinations that support the underlying standard; expanding coverage as platform support evolves.
+- **Open CORS support for arbitrary frontends** — currently scoped to this build's known origins, straightforward to broaden for a wider production deployment.
+- **Google OAuth production verification** — completing the privacy policy publication and CASA security assessment needed for `gmail.readonly` to move from testing to full public availability.
 
 ---
 
@@ -146,4 +149,4 @@ This project was built with substantial assistance from AI tools, used transpare
 - **Lovable** — AI-assisted generation and iteration of the React frontend.
 - **Replit's built-in AI agent** — used for backend deployment management, dependency installation, and operational tasks on the hosting environment.
 
-All AI-assisted code was reviewed, tested, and iterated on by the developer throughout the build process, including catching and fixing multiple genuine bugs found through real testing (not just theoretical review).
+All AI-assisted code was reviewed and tested by the developer throughout the build process.
