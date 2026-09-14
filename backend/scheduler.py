@@ -146,10 +146,13 @@ def _send_digest(user_id: str, cards: list[dict]):
             opt_type = opt.get("option_type")
             if opt_type in ("dismiss", "remind_later"):
                 actions.append({"action": opt_type, "title": opt.get("label", opt_type)})
+        savings = card.get("computed_savings_gbp")
+        body = f"£{savings:.0f} potential impact" if savings else "Tap to see details"
+
         send_push_to_user(
             user_id,
             title=card["title"],
-            body=card["summary"][:150],
+            body=body,
             url="/static/index.html",
             card_id=card.get("card_id"),
             signal_id=card.get("signal_id"),
