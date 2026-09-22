@@ -1,0 +1,47 @@
+{
+  "results": [
+    {
+      "timestamp": "2026-08-14T00:00:00Z",
+      "description": "ANTHROPIC",
+      "transaction_type": "DEBIT",
+      "transaction_category": "PURCHASE",
+      "transaction_classification": [],
+      "amount": -16.0,
+      "currency": "GBP",
+      "transaction_id": "mock-anthropic-001",
+      "provider_transaction_id": "mock-provider-001",
+      "normalised_provider_transaction_id": "txn-mock-001",
+      "running_balance": {"currency": "GBP", "amount": 1240.0},
+      "meta": {"provider_transaction_category": "DEB"}
+    },
+    {
+      "timestamp": "2026-09-14T00:00:00Z",
+      "description": "ANTHROPIC",
+      "transaction_type": "DEBIT",
+      "transaction_category": "PURCHASE",
+      "transaction_classification": [],
+      "amount": -16.0,
+      "currency": "GBP",
+      "transaction_id": "mock-anthropic-002",
+      "provider_transaction_id": "mock-provider-002",
+      "normalised_provider_transaction_id": "txn-mock-002",
+      "running_balance": {"currency": "GBP", "amount": 1224.0},
+      "meta": {"provider_transaction_category": "DEB"}
+    },
+    {
+      "timestamp": "2026-08-16T00:00:00Z",
+      "description": "PULSEFIT GYM",
+      "transaction_type": "DEBIT",
+      "transaction_category": "PURCHASE",
+      "transaction_classification": [],
+      "amount": -45.0,
+      "currency": "GBP",
+      "transaction_id": "mock-pulsefit-001",
+      "provider_transaction_id": "mock-provider-003",
+      "normalised_provider_transaction_id": "txn-mock-003",
+      "running_balance": {"currency": "GBP", "amount": 1179.0},
+      "meta": {"provider_transaction_category": "DEB"}
+    }
+  ],
+  "status": "Succeeded"
+}

@@ -34,6 +34,7 @@ from user_data import get_user_data, has_user_data, enable_example_scenario, set
 import gmail_auth
 from gmail_reader import fetch_recent_emails, extract_signal_from_email, fetch_receipt_history, group_emails_by_sender_domain
 from upload_extraction import infer_recurring_pattern
+from openbanking_reader import fetch_recurring_candidates
 from upload_extraction import classify_email
 from jobs import create_job, complete_job, fail_job, get_job
 import threading
@@ -525,6 +526,53 @@ def gmail_check(user_id: str = Depends(require_user)):
         job_ids[category] = job_id
 
     return {"emails_scanned": len(emails), "categories_found": list(by_category.keys()), "job_ids": job_ids}
+
+
+@app.post("/openbanking/detect-recurring")
+def openbanking_detect_recurring(user_id: str = Depends(require_user)):
+    """Same recurring-pattern detection as Gmail, but reading from
+    Open Banking transaction data instead -- proves the data source is
+    genuinely swappable, since this reuses infer_recurring_pattern
+    completely unchanged. Currently reads a verified-realistic mock
+    dataset (built to match a real TrueLayer sandbox response); a
+    production version would call the real Data API using the user's
+    stored access token."""
+    candidates = fetch_recurring_candidates(user_id)
+    if not candidates:
+        return {"merchants_scanned": 0, "patterns_found": []}
+
+    patterns_found = []
+    for merchant, receipts in candidates.items():
+        try:
+            pattern = infer_recurring_pattern(receipts)
+        except Exception:
+            continue
+        if pattern:
+            patterns_found.append(pattern)
+            if pattern.get("predicted_next_charge_date"):
+                existing = get_user_data(user_id, "membership") or {}
+                template_path = DATA_DIR / _SCENARIO_FILES["membership"]
+                with open(template_path) as f:
+                    base = json.load(f)
+                raw_data = {**base, **existing,
+                    "provider": pattern.get("provider", base.get("provider")),
+                    "current_price_gbp": pattern.get("amount_gbp", base.get("current_price_gbp")),
+                    "renewal_price_gbp": pattern.get("amount_gbp", base.get("renewal_price_gbp")),
+                    "renewal_date": pattern.get("predicted_next_charge_date"),
+                    "user_id": user_id,
+                }
+                set_user_data(user_id, "membership", raw_data)
+                mark_gmail_derived(user_id, "membership")
+
+                job_id = create_job()
+                thread = threading.Thread(
+                    target=_run_reeval_job,
+                    args=(job_id, user_id, "membership", raw_data, "2026-09-14"),
+                    daemon=True,
+                )
+                thread.start()
+
+    return {"merchants_scanned": len(candidates), "patterns_found": patterns_found}
 
 
 @app.post("/gmail/detect-recurring")
