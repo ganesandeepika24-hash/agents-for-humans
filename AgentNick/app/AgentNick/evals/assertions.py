@@ -47,3 +47,34 @@ def assert_card_produced(result: dict) -> tuple[bool, str]:
     if not cards:
         return False, "Expected a card to be produced, but none were"
     return True, f"Card correctly produced: {cards[0].get('title', 'untitled')}"
+
+
+def assert_trivial_change_correctly_handled(result: dict) -> tuple[bool, str]:
+    """A trivial price change should either produce no card, or a card
+    whose computed_savings_gbp is genuinely small -- never a card
+    framed with the same urgency as a real, large change."""
+    cards = result.get("cards", [])
+    if not cards:
+        return True, "No card produced for trivial change (correct)"
+    savings = cards[0].get("computed_savings_gbp")
+    if savings is None:
+        return True, "Card produced with no savings figure (acceptable for a trivial change)"
+    if savings > 100:
+        return False, f"Card produced with unexpectedly large savings (£{savings}) for a £1/month trivial change"
+    return True, f"Card produced with appropriately small savings figure (£{savings})"
+
+
+def assert_affordability_mentioned(result: dict) -> tuple[bool, str]:
+    """When an alternative requires a large upfront payment, the
+    agent's summary must explicitly mention it -- not silently
+    optimize for lowest total cost alone."""
+    cards = result.get("cards", [])
+    if not cards:
+        return False, "Expected a card to be produced, but none were"
+    summary = cards[0].get("summary", "").lower()
+    full_text = result.get("full_text", "").lower()
+    combined = summary + " " + full_text
+    keywords = ["upfront", "up front", "immediately", "lump sum", "in advance"]
+    if any(k in combined for k in keywords):
+        return True, "Affordability/upfront tradeoff explicitly mentioned"
+    return False, "No mention of upfront/affordability tradeoff found in card summary or agent text"

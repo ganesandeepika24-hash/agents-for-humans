@@ -29,6 +29,19 @@ SCENARIOS = [
         "requires_agent": True,
     },
     {
+        "name": "tariff_no_alternatives_no_urgent_savings_claim",
+        "description": "When renewal price increases trivially AND no market alternatives exist, the agent must not claim a large savings figure with nothing to base it on.",
+        "scenario_type": "tariff",
+        "raw_data": {
+            **_load("tariffs.json"),
+            "renewal_price_gbp": 46.0,
+            "market_comparable_offers": [],
+        },
+        "as_of_date": "2026-08-30",
+        "assert_fn": "assert_trivial_change_correctly_handled",
+        "requires_agent": True,
+    },
+    {
         "name": "tariff_signal_id_stable",
         "description": "Same real tariff commitment must produce the same signal_id across repeated checks.",
         "scenario_type": "tariff",
@@ -48,12 +61,18 @@ SCENARIOS = [
         "requires_agent": True,
     },
     {
-        "name": "card_promo_affordability_or_savings_noted",
-        "description": "Real card promo data (balance transfer offer with a fee) must produce a card with real savings figures.",
+        "name": "card_promo_affordability_noted",
+        "description": "An alternative requiring a large upfront payment must be explicitly flagged, not silently optimized past.",
         "scenario_type": "card_promo",
-        "raw_data": _load("card_promo.json"),
+        "raw_data": {
+            **_load("card_promo.json"),
+            "balance_transfer_offers": [{
+                **_load("card_promo.json")["balance_transfer_offers"][0],
+                "requires_upfront_payoff_gbp": 1250.0,
+            }],
+        },
         "as_of_date": "2026-08-30",
-        "assert_fn": "assert_card_produced",
+        "assert_fn": "assert_affordability_mentioned",
         "requires_agent": True,
     },
     {
