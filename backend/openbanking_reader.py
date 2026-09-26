@@ -13,20 +13,18 @@ replacing _load_transactions() with a real API call -- everything
 downstream (grouping, pattern inference) is already source-agnostic.
 """
 
-import json
-from pathlib import Path
 from collections import defaultdict
-
-_MOCK_DATA_PATH = Path(__file__).parent / "openbanking_mock.json"
+from openbanking_mock_generator import generate_mock_transactions
 
 
 def _load_transactions(user_id: str) -> list[dict]:
-    """Loads transaction data. Currently reads the mock dataset for any
-    user; a real implementation would use the user's stored TrueLayer
-    access token to call GET /data/v1/accounts/{account_id}/transactions
-    for each of their connected accounts."""
-    with open(_MOCK_DATA_PATH) as f:
-        data = json.load(f)
+    """Generates transaction data fresh, in memory, every call -- dates
+    are always computed relative to the actual current moment, so this
+    never goes stale regardless of when it's tested. A real
+    implementation would use the user's stored TrueLayer access token
+    to call GET /data/v1/accounts/{account_id}/transactions for each
+    of their connected accounts instead."""
+    data = generate_mock_transactions()
     return data.get("results", [])
 
 
