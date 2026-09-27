@@ -28,5 +28,17 @@
   <div class="detail-row"><span>Renewal price</span><span>£65.00/month</span></div>
   <a class="btn" href="#">Talk to our retention team</a>
 </div>
+
+<script>
+(function() {
+  var baseline = new Date(2026, 7, 30); // 2026-08-30, month is 0-indexed
+  var offsetDays = 16;
+  var target = new Date();
+  target.setDate(target.getDate() + offsetDays);
+  var months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var formatted = target.getDate() + " " + months[target.getMonth()] + " " + target.getFullYear();
+  document.body.innerHTML = document.body.innerHTML.replace("15 September 2026", formatted);
+})();
+</script>
 </body>
 </html>

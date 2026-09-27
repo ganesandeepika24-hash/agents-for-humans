@@ -26,5 +26,17 @@
   <div class="detail-row"><span>Minimum payment</span><span>£35.00/month</span></div>
   <a class="btn" href="#">Manage my payments</a>
 </div>
+
+<script>
+(function() {
+  var baseline = new Date(2026, 7, 30); // 2026-08-30, month is 0-indexed
+  var offsetDays = 26;
+  var target = new Date();
+  target.setDate(target.getDate() + offsetDays);
+  var months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var formatted = target.getDate() + " " + months[target.getMonth()] + " " + target.getFullYear();
+  document.body.innerHTML = document.body.innerHTML.replace("25 September 2026", formatted);
+})();
+</script>
 </body>
 </html>

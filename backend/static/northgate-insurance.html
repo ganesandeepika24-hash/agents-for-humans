@@ -6,4 +6,16 @@
 <div class="row"><span>Policy type</span><span>Home Insurance</span></div>
 <div class="row"><span>Current price</span><span>£240.00/year</span></div>
 <div class="row"><span>Renewal price</span><span>£340.00/year</span></div>
-<a class="btn" href="#">Review my renewal</a></div></body></html>
+<a class="btn" href="#">Review my renewal</a></div>
+<script>
+(function() {
+  var baseline = new Date(2026, 7, 30); // 2026-08-30, month is 0-indexed
+  var offsetDays = 32;
+  var target = new Date();
+  target.setDate(target.getDate() + offsetDays);
+  var months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var formatted = target.getDate() + " " + months[target.getMonth()] + " " + target.getFullYear();
+  document.body.innerHTML = document.body.innerHTML.replace("1 October 2026", formatted);
+})();
+</script>
+</body></html>

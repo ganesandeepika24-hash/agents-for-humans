@@ -5,4 +5,16 @@
 <div class="banner"><strong>Your membership renews 20 September 2026.</strong><br>New price: £45.00/month</div>
 <div class="row"><span>Current price</span><span>£35.00/month</span></div>
 <div class="row"><span>Renewal price</span><span>£45.00/month</span></div>
-<a class="btn" href="#">Manage my membership</a></div></body></html>
+<a class="btn" href="#">Manage my membership</a></div>
+<script>
+(function() {
+  var baseline = new Date(2026, 7, 30); // 2026-08-30, month is 0-indexed
+  var offsetDays = 21;
+  var target = new Date();
+  target.setDate(target.getDate() + offsetDays);
+  var months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var formatted = target.getDate() + " " + months[target.getMonth()] + " " + target.getFullYear();
+  document.body.innerHTML = document.body.innerHTML.replace("20 September 2026", formatted);
+})();
+</script>
+</body></html>
