@@ -3,8 +3,8 @@
   "provider": "Meridian Broadband",
   "current_speed_mbps": 150,
   "current_price_gbp": 45.0,
-  "contract_start_date": "2025-09-15",
-  "contract_end_date": "2026-09-15",
+  "contract_start_date": "2025-10-13",
+  "contract_end_date": "2026-10-13",
   "renewal_price_gbp": 65.0,
   "market_comparable_offers": [
     {

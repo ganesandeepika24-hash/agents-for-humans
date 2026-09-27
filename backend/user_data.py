@@ -57,13 +57,55 @@ def get_user_data(user_id: str, scenario_type: str) -> dict | None:
         conn.close()
 
 
+_ORIGINAL_BASELINE = __import__("datetime").date(2026, 8, 30)
+_DATE_FIELDS_BY_SCENARIO = {
+    "tariff": ["contract_start_date", "contract_end_date"],
+    "trial": ["trial_start_date", "trial_end_date", "cancellation_deadline"],
+    "card_promo": ["promo_apr_start_date", "promo_apr_end_date", "next_payment_due_date"],
+    "card_promo_incomplete": ["promo_apr_start_date", "promo_apr_end_date", "next_payment_due_date"],
+    "insurance": ["renewal_date"],
+    "membership": ["renewal_date"],
+}
+
+
+# The ORIGINAL, fixed day-offsets-from-baseline for each date field,
+# captured once and never re-derived from the template file's current
+# (mutable) contents -- re-deriving from the file caused a real
+# double-shift bug, since the file's stored date changes every time
+# this runs, but the intended STORY offset (e.g. "contract ends 16
+# days after the demo baseline") never should.
+_FIXED_OFFSETS_FROM_BASELINE = {
+    "tariff": {"contract_start_date": -365, "contract_end_date": 16},
+    "trial": {"trial_start_date": -11, "trial_end_date": 3, "cancellation_deadline": 0},
+    "card_promo": {"promo_apr_start_date": -370, "promo_apr_end_date": 26, "next_payment_due_date": 6},
+    "card_promo_incomplete": {"promo_apr_start_date": -370, "promo_apr_end_date": 26, "next_payment_due_date": 6},
+    "insurance": {"renewal_date": 32},
+    "membership": {"renewal_date": 21},
+}
+
+
+def _refresh_dates_relative_to_today(data: dict, scenario_type: str) -> dict:
+    """Shifts every date field to be that field's FIXED, original offset
+    from today -- never re-derives the offset from the template file's
+    current (mutable) value, which would compound on every call."""
+    from datetime import date, timedelta
+    today = date.today()
+    offsets = _FIXED_OFFSETS_FROM_BASELINE.get(scenario_type, {})
+    for field, offset_days in offsets.items():
+        if field in data:
+            data[field] = (today + timedelta(days=offset_days)).isoformat()
+    return data
+
+
 def enable_example_scenario(user_id: str, scenario_type: str) -> dict:
     """Explicit opt-in: user chose to try an example scenario. This is
     the ONLY way example/template data gets seeded now -- never
-    automatically on first check."""
+    automatically on first check. Dates are refreshed relative to
+    today every time this runs, so they never go stale."""
     template_path = _TEMPLATE_DIR / _SCENARIO_FILES[scenario_type]
     with open(template_path) as f:
         data = json.load(f)
+    data = _refresh_dates_relative_to_today(data, scenario_type)
     data["user_id"] = user_id
     set_user_data(user_id, scenario_type, data)
     return data

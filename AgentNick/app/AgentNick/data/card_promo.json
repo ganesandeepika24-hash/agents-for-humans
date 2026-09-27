@@ -1,8 +1,8 @@
 {
   "user_id": "demo_user",
   "card_provider": "Vantage Trust Bank",
-  "promo_apr_start_date": "2025-09-25",
-  "promo_apr_end_date": "2026-09-25",
+  "promo_apr_start_date": "2025-10-23",
+  "promo_apr_end_date": "2026-10-23",
   "standard_apr_pct": 24.9,
   "current_balance_gbp": 1250.0,
   "minimum_payment_gbp": 35.0,
@@ -18,6 +18,6 @@
   "missed_payment_count": 0,
   "promo_rate_still_active": true,
   "payment_method": "manual",
-  "next_payment_due_date": "2026-09-05",
+  "next_payment_due_date": "2026-10-03",
   "provider_portal_url": "https://f917a6d1-f299-444c-96af-61b8209cfd8c-00-339l9ymu91s2a.archer.replit.dev/static/vantage-trust-bank.html"
 }
