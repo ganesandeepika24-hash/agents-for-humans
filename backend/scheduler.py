@@ -260,6 +260,7 @@ def run_time_driven_escalation_check():
 
     today = date.today().isoformat()
     user_ids = list_all_user_ids()
+    escalations_for_digest = {}
 
     for user_id in user_ids:
         active_signals = get_all_active_signals_for_user(user_id)
@@ -318,15 +319,45 @@ def run_time_driven_escalation_check():
                         new_card["scenario_type"] = scenario_type
                         if new_card.get("signal_id") == signal_id:
                             reopen_signal(user_id, signal_id, new_card)
-                            send_push_to_user(
-                                user_id, title=new_card["title"],
-                                body=(f"£{new_card['computed_savings_gbp']:.0f} potential impact"
-                                      if new_card.get("computed_savings_gbp") else "Tap to see details"),
-                                url=f"https://agentnick-finance-guard.lovable.app/?card={signal_id}",
-                                card_id=new_card.get("card_id"), signal_id=signal_id,
-                            )
+                            if result["tier"] == "urgent":
+                                # Final tier always sends immediately,
+                                # on its own -- never batched, since
+                                # this is the "act now" moment.
+                                send_push_to_user(
+                                    user_id, title=new_card["title"],
+                                    body=(f"£{new_card['computed_savings_gbp']:.0f} potential impact"
+                                          if new_card.get("computed_savings_gbp") else "Tap to see details"),
+                                    url=f"https://agentnick-finance-guard.lovable.app/?card={signal_id}",
+                                    card_id=new_card.get("card_id"), signal_id=signal_id,
+                                )
+                            else:
+                                # Earlier tiers batch into one daily
+                                # digest per user, sent after the full
+                                # sweep -- see escalations_for_digest below.
+                                escalations_for_digest.setdefault(user_id, []).append(new_card)
                 except Exception as e:
                     print(f"[scheduler] Escalation re-evaluation error for {user_id}/{signal_id}: {e}")
+
+    # Send one combined digest per user for any non-urgent escalations
+    # collected during this sweep -- avoids sending 5 separate
+    # notifications if 5 different subscriptions all happen to cross a
+    # tier on the same day.
+    for user_id, cards in escalations_for_digest.items():
+        if len(cards) == 1:
+            card = cards[0]
+            send_push_to_user(
+                user_id, title=card["title"],
+                body=(f"£{card['computed_savings_gbp']:.0f} potential impact"
+                      if card.get("computed_savings_gbp") else "Tap to see details"),
+                url=f"https://agentnick-finance-guard.lovable.app/?card={card.get('signal_id', '')}",
+                card_id=card.get("card_id"), signal_id=card.get("signal_id"),
+            )
+        else:
+            send_push_to_user(
+                user_id, title=f"AgentNick: {len(cards)} updates need your attention",
+                body=f"{len(cards)} things worth a look, no rush",
+                url="https://agentnick-finance-guard.lovable.app/",
+            )
 
 
 def run_confirmation_email_check():
