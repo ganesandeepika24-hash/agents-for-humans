@@ -30,6 +30,26 @@ _FIXED_IDENTITY_FIELDS = {
     "insurance": "provider", "membership": "provider", "trial": "service",
 }
 
+# Optional secondary identity component -- when present in raw_data,
+# folded into the fingerprint alongside the primary identity field so
+# two commitments from the same provider (e.g. two insurance policies)
+# get genuinely distinct signal_ids, instead of being silently merged
+# into one. When absent (the common case), behavior is unchanged.
+_SECONDARY_IDENTITY_FIELDS = {
+    "insurance": "policy_number", "membership": "plan_name",
+    "tariff": "account_number", "card_promo": "account_number",
+}
+
+# Optional secondary identity component -- when present in raw_data,
+# folded into the fingerprint alongside the primary identity field so
+# two commitments from the same provider (e.g. two insurance policies)
+# get genuinely distinct signal_ids, instead of being silently merged
+# into one. When absent (the common case), behavior is unchanged.
+_SECONDARY_IDENTITY_FIELDS = {
+    "insurance": "policy_number", "membership": "plan_name",
+    "tariff": "account_number", "card_promo": "account_number",
+}
+
 
 @tool
 def parse_financial_signals(
@@ -118,7 +138,17 @@ def parse_financial_signals(
     # type, business identifier) -- deliberately excludes the date, since
     # different date fields or values must not change the identity of the
     # same underlying commitment.
-    fingerprint_source = f"{user_id}|{source_type}|{raw_data[identity_field]}"
+    secondary_field = _SECONDARY_IDENTITY_FIELDS.get(source_type)
+    secondary_value = raw_data.get(secondary_field) if secondary_field else None
+    if secondary_value:
+        fingerprint_source = f"{user_id}|{source_type}|{raw_data[identity_field]}|{secondary_value}"
+    else:
+        secondary_field = _SECONDARY_IDENTITY_FIELDS.get(source_type)
+    secondary_value = raw_data.get(secondary_field) if secondary_field else None
+    if secondary_value:
+        fingerprint_source = f"{user_id}|{source_type}|{raw_data[identity_field]}|{secondary_value}"
+    else:
+        fingerprint_source = f"{user_id}|{source_type}|{raw_data[identity_field]}"
     signal_id = hashlib.sha256(fingerprint_source.encode()).hexdigest()[:16]
 
     return FinancialSignal(
