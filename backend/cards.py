@@ -31,7 +31,7 @@ def _get_connection():
             signal_id TEXT NOT NULL,
             card_json TEXT NOT NULL,
             first_notified_at TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',
+            status TEXT NOT NULL DEFAULT 'awaiting_response',
             PRIMARY KEY (user_id, signal_id)
         )
     """)
@@ -42,7 +42,7 @@ def has_been_notified(user_id: str, signal_id: str) -> bool:
     conn = _get_connection()
     try:
         row = conn.execute(
-            "SELECT 1 FROM notified_signals WHERE user_id = ? AND signal_id = ? AND status != 'resolved'",
+            "SELECT 1 FROM notified_signals WHERE user_id = ? AND signal_id = ? AND status NOT IN ('decided', 'expired_confirmed')",
             (user_id, signal_id),
         ).fetchone()
         return row is not None
@@ -65,7 +65,7 @@ def record_notification(user_id: str, signal_id: str, card: dict):
             """
             INSERT OR IGNORE INTO notified_signals
                 (user_id, signal_id, card_json, first_notified_at, status)
-            VALUES (?, ?, ?, ?, 'pending')
+            VALUES (?, ?, ?, ?, 'awaiting_response')
             """,
             (user_id, signal_id, _fernet.encrypt(json.dumps(card).encode()).decode(), datetime.utcnow().isoformat()),
         )
@@ -161,10 +161,10 @@ def reopen_signal(user_id: str, signal_id: str, card: dict):
     try:
         conn.execute("""
             INSERT INTO notified_signals (user_id, signal_id, card_json, first_notified_at, status)
-            VALUES (?, ?, ?, ?, 'pending')
+            VALUES (?, ?, ?, ?, 'awaiting_response')
             ON CONFLICT(user_id, signal_id) DO UPDATE SET
                 card_json = excluded.card_json,
-                status = 'pending'
+                status = 'awaiting_response'
         """, (user_id, signal_id, _fernet.encrypt(json.dumps(card).encode()).decode(), datetime.utcnow().isoformat()))
         conn.commit()
     finally:
@@ -188,12 +188,73 @@ def get_card_by_signal(user_id: str, signal_id: str) -> dict | None:
 
 
 def get_pending_cards_for_user(user_id: str) -> list[dict]:
+    """Returns every card the user should still see: not yet responded
+    to, snoozed, waiting on a confirmation email, or expired but
+    unconfirmed (stays visible until manually dismissed). Excludes
+    'decided' (final, silent) and 'expired_confirmed' (auto-removed)."""
     conn = _get_connection()
     try:
         rows = conn.execute(
-            "SELECT card_json FROM notified_signals WHERE user_id = ? AND status = 'pending'",
+            "SELECT card_json FROM notified_signals WHERE user_id = ? AND status IN "
+            "('awaiting_response', 'awaiting_confirmation', 'expired_unconfirmed')",
             (user_id,),
         ).fetchall()
         return [json.loads(_fernet.decrypt(r[0].encode()).decode()) for r in rows]
+    finally:
+        conn.close()
+
+
+def mark_decided(user_id: str, signal_id: str):
+    """User chose keep/accept -- final, silences the card forever."""
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "UPDATE notified_signals SET status = 'decided' WHERE user_id = ? AND signal_id = ?",
+            (user_id, signal_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def mark_awaiting_confirmation(user_id: str, signal_id: str):
+    """User chose switch/cancel -- waits for a confirmation email
+    before going fully silent; re-escalates if unconfirmed by the
+    next stage or by expiry."""
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "UPDATE notified_signals SET status = 'awaiting_confirmation' WHERE user_id = ? AND signal_id = ?",
+            (user_id, signal_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def mark_expired(user_id: str, signal_id: str, confirmed: bool):
+    """Deadline has passed. If a confirmation email was seen, the card
+    is auto-removed (expired_confirmed). Otherwise it stays visible,
+    reworded, until the user manually dismisses it (expired_unconfirmed)."""
+    new_status = "expired_confirmed" if confirmed else "expired_unconfirmed"
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "UPDATE notified_signals SET status = ? WHERE user_id = ? AND signal_id = ?",
+            (new_status, user_id, signal_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_card_status(user_id: str, signal_id: str) -> str | None:
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT status FROM notified_signals WHERE user_id = ? AND signal_id = ?",
+            (user_id, signal_id),
+        ).fetchone()
+        return row[0] if row else None
     finally:
         conn.close()
