@@ -25,6 +25,7 @@ from users import list_all_user_ids
 from user_data import get_user_data, has_user_data
 from gmail_auth import is_connected as gmail_is_connected
 from gmail_reader import fetch_recent_emails, extract_signal_from_email
+from post_deadline import reword_for_expiry
 from cards import (
     record_notification, get_card_by_signal, reopen_signal,
     get_last_fingerprint, set_last_fingerprint,
@@ -295,6 +296,8 @@ def run_time_driven_escalation_check():
             # always lands in the unconfirmed (visible) state.
             if key_date < today:
                 if status not in ("expired_confirmed", "expired_unconfirmed"):
+                    reworded_card = reword_for_expiry(card, raw_data)
+                    reopen_signal(user_id, signal_id, reworded_card)
                     mark_expired(user_id, signal_id, confirmed=False)
                 continue
 
