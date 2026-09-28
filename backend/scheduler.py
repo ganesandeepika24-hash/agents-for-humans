@@ -232,6 +232,7 @@ def _send_digest(user_id: str, cards: list[dict]):
 def start_scheduler():
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_scheduled_check, "interval", minutes=30, id="agentnick_check")
+    scheduler.add_job(run_time_driven_escalation_check, "interval", minutes=30, id="agentnick_escalation_check")
     scheduler.start()
     print("[scheduler] Started — checking every 30 minutes.")
     return scheduler
