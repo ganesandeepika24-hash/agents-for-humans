@@ -1,3 +1,4 @@
+from datetime import date
 """
 AgentNick backend — FastAPI app.
 
@@ -21,7 +22,7 @@ from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from invoke_agent import invoke_agent_for_check
 from send_email import send_action_email
@@ -204,7 +205,7 @@ def approve(req: ApproveRequest, user_id: str = Depends(require_user)):
 
 class CheckRequest(BaseModel):
     scenario_type: str
-    as_of_date: str = "2026-08-30"
+    as_of_date: str = Field(default_factory=lambda: date.today().isoformat())
 
 
 def _compute_data_fingerprint(raw_data: dict) -> str:
@@ -355,7 +356,7 @@ def _run_reeval_job(job_id: str, user_id: str, scenario_type: str, raw_data: dic
 class SubmitDataRequest(BaseModel):
     signal_id: str
     scenario_type: str
-    as_of_date: str = "2026-08-30"
+    as_of_date: str = date.today().isoformat()
     values: dict
 
 
@@ -391,7 +392,7 @@ def submit_data(req: SubmitDataRequest, user_id: str = Depends(require_user)):
 async def upload_document(
     signal_id: str = Form(...),
     scenario_type: str = Form(...),
-    as_of_date: str = Form("2026-08-30"),
+    as_of_date: str = Form(None),
     file: UploadFile = File(...),
     user_id: str = Depends(require_user),
 ):
@@ -400,6 +401,8 @@ async def upload_document(
     and re-evaluate."""
     if scenario_type not in _SCENARIO_FILES:
         raise HTTPException(status_code=400, detail=f"Unknown scenario_type: {scenario_type}")
+    if as_of_date is None:
+        as_of_date = date.today().isoformat()
 
     file_bytes = await file.read()
     media_type = file.content_type or "application/pdf"
@@ -519,7 +522,7 @@ def gmail_check(user_id: str = Depends(require_user)):
         job_id = create_job()
         thread = threading.Thread(
             target=_run_reeval_job,
-            args=(job_id, user_id, category, raw_data, "2026-08-30"),
+            args=(job_id, user_id, category, raw_data, date.today().isoformat()),
             daemon=True,
         )
         thread.start()
@@ -567,7 +570,7 @@ def openbanking_detect_recurring(user_id: str = Depends(require_user)):
                 job_id = create_job()
                 thread = threading.Thread(
                     target=_run_reeval_job,
-                    args=(job_id, user_id, "membership", raw_data, "2026-09-14"),
+                    args=(job_id, user_id, "membership", raw_data, date.today().isoformat()),
                     daemon=True,
                 )
                 thread.start()
@@ -619,7 +622,7 @@ def gmail_detect_recurring(user_id: str = Depends(require_user)):
                 job_id = create_job()
                 thread = threading.Thread(
                     target=_run_reeval_job,
-                    args=(job_id, user_id, "membership", raw_data, "2026-09-14"),
+                    args=(job_id, user_id, "membership", raw_data, date.today().isoformat()),
                     daemon=True,
                 )
                 thread.start()

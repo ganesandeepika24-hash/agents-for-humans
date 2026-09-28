@@ -1,3 +1,4 @@
+from datetime import date
 """
 scheduler.py
 
@@ -95,7 +96,7 @@ def run_scheduled_check():
                 result = invoke_agent_for_check(
                     scenario_type=scenario_type,
                     raw_data=raw_data,
-                    as_of_date="2026-08-30",
+                    as_of_date=date.today().isoformat(),
                 )
             except Exception as e:
                 print(f"[scheduler] Error checking {scenario_type} for {user_id}: {e}")
@@ -153,7 +154,7 @@ def run_scheduled_check():
 
                         try:
                             result = invoke_agent_for_check(
-                                scenario_type=scenario_type, raw_data=raw_data, as_of_date="2026-08-30",
+                                scenario_type=scenario_type, raw_data=raw_data, as_of_date=date.today().isoformat(),
                             )
                         except Exception as e:
                             print(f"[scheduler] Gmail-derived check error for {user_id}: {e}")
