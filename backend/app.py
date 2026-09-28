@@ -29,7 +29,7 @@ from send_email import send_action_email
 from scheduler import start_scheduler, pause as pause_scheduler, resume as resume_scheduler, is_paused
 from push_notifications import add_subscription, send_push_to_user
 from users import login as do_login, get_user_id_from_token
-from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal
+from cards import record_notification, mark_resolved, get_pending_cards_for_user, get_card_by_signal, forget_signal, get_last_fingerprint, set_last_fingerprint, reopen_signal, mark_decided, mark_awaiting_confirmation
 from user_settings import get_threshold, set_threshold
 from user_data import get_user_data, has_user_data, enable_example_scenario, set_user_data, mark_gmail_derived, clear_all_gmail_derived_data, has_user_data, enable_example_scenario
 import gmail_auth
@@ -181,23 +181,35 @@ def approve(req: ApproveRequest, user_id: str = Depends(require_user)):
         if not req.email_to or not req.email_body:
             raise HTTPException(status_code=400, detail="email_to and email_body required for email options")
         # mailto: link returned instead of sending "as" the user -- see
-        # README for why (real providers are unlikely to honor a
-        # cancellation email that didn't come from the customer's own
-        # verified address).
+        # README for why. The user has decided to act (e.g. cancel),
+        # but we haven't SEEN it happen yet -- awaiting_confirmation,
+        # not final, so it can re-escalate if no confirmation email
+        # ever arrives.
         mailto = f"mailto:{req.email_to}?subject={req.email_subject or ''}&body={req.email_body}"
-        mark_resolved(user_id, req.signal_id)
+        mark_awaiting_confirmation(user_id, req.signal_id)
         return {"status": "draft_ready", "mailto_url": mailto}
 
     if req.option_type == "action_url":
-        # External action the agent can't complete itself -- acknowledged,
-        # not resolved, since the user still has to go complete it.
+        # External action (switch provider, negotiate) -- the user has
+        # decided, but we can't confirm it completed. Same reasoning
+        # as email: awaiting_confirmation, not final.
+        mark_awaiting_confirmation(user_id, req.signal_id)
         return {"status": "acknowledged", "action_url": req.action_url}
 
-    if req.option_type in ("dismiss", "remind_later"):
-        mark_resolved(user_id, req.signal_id)
+    if req.option_type == "dismiss":
+        # Genuinely final: user chose to keep the current
+        # provider/rate/subscription as-is. No further notifications.
+        mark_decided(user_id, req.signal_id)
         return {"status": "acknowledged", "option_type": req.option_type}
 
-    if req.option_type in ("reveal_warning", "reveal_comparison"):
+    if req.option_type == "remind_later":
+        # Deliberately does NOT change status -- stays in whatever
+        # active state it was in (awaiting_response), so it correctly
+        # re-escalates at the next stage rather than going silent.
+        return {"status": "acknowledged", "option_type": req.option_type}
+
+    if req.option_type in ("reveal_warning", "reveal_comparison", "info_only"):
+        # Purely informational -- no decision made, no status change.
         return {"status": "acknowledged", "option_type": req.option_type}
 
     raise HTTPException(status_code=400, detail=f"Unknown option_type: {req.option_type}")
