@@ -53,13 +53,7 @@ def is_paused() -> bool:
 
 
 DATA_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
-_SCENARIO_FILES = {
-    "tariff": "tariffs.json",
-    "trial": "trial.json",
-    "card_promo": "card_promo.json",
-    "insurance": "insurance.json",
-    "membership": "membership.json",
-}
+from scenario_registry import SCENARIO_FILES as _SCENARIO_FILES
 
 
 def _fingerprint(raw_data: dict) -> str:
@@ -332,3 +326,62 @@ def run_time_driven_escalation_check():
                             )
                 except Exception as e:
                     print(f"[scheduler] Escalation re-evaluation error for {user_id}/{signal_id}: {e}")
+
+
+def run_confirmation_email_check():
+    """Scans connected users' Gmail for switch/cancellation
+    confirmation emails, and matches each one back to a specific
+    awaiting_confirmation card by provider name. A match marks the
+    card decided (final, silent). No match for a given card by the
+    time it reaches its next escalation tier or expires just means
+    it stays in awaiting_confirmation and gets asked about directly
+    (a 'did you switch?' follow-up is a separate, later piece)."""
+    import sys
+    sys.path.insert(0, "/workspaces/agents-for-humans/AgentNick/app/AgentNick")
+    from upload_extraction import classify_email, extract_confirmation_provider
+    from cards import get_all_active_signals_for_user, mark_decided
+
+    for user_id in list_all_user_ids():
+        if not gmail_is_connected(user_id):
+            continue
+
+        active_signals = get_all_active_signals_for_user(user_id)
+        awaiting_confirmation_signals = [
+            s for s in active_signals if s["status"] == "awaiting_confirmation"
+        ]
+        if not awaiting_confirmation_signals:
+            continue
+
+        try:
+            emails = fetch_recent_emails(user_id, query="newer_than:14d")
+        except Exception as e:
+            print(f"[scheduler] Confirmation email fetch error for {user_id}: {e}")
+            continue
+
+        for email in emails[:10]:
+            email_text = f"Subject: {email['subject']}\n\n{email['body']}"
+            try:
+                category = classify_email(email_text)
+            except Exception:
+                continue
+            if category not in ("switch_confirmation", "cancellation_confirmation"):
+                continue
+
+            try:
+                provider = extract_confirmation_provider(email_text)
+            except Exception:
+                continue
+            if not provider:
+                continue
+
+            for signal in awaiting_confirmation_signals:
+                signal_scenario_type = signal["card"].get("scenario_type")
+                signal_raw_data = get_user_data(user_id, signal_scenario_type) or {}
+                card_provider = (
+                    signal_raw_data.get("provider") or signal_raw_data.get("card_provider") or ""
+                )
+                if not card_provider:
+                    continue
+                if provider.lower() in card_provider.lower() or card_provider.lower() in provider.lower():
+                    mark_decided(user_id, signal["signal_id"])
+                    print(f"[scheduler] Confirmed {category} for {user_id}/{signal['signal_id']} (provider: {provider})")

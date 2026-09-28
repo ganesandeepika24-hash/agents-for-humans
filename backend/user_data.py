@@ -14,10 +14,7 @@ _fernet = Fernet(os.environ['EMAIL_ENCRYPTION_KEY'].encode())
 
 _DB_PATH = Path(__file__).parent / "user_data.db"
 _TEMPLATE_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
-_SCENARIO_FILES = {
-    "tariff": "tariffs.json", "trial": "trial.json",
-    "card_promo": "card_promo.json", "card_promo_incomplete": "card_promo_incomplete.json",
-}
+from scenario_registry import SCENARIO_FILES as _SCENARIO_FILES
 
 
 def _get_connection():

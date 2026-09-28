@@ -56,14 +56,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 DATA_DIR = Path(__file__).parent.parent / "AgentNick" / "app" / "AgentNick" / "data"
-_SCENARIO_FILES = {
-    "tariff": "tariffs.json",
-    "trial": "trial.json",
-    "card_promo": "card_promo.json",
-    "insurance": "insurance.json",
-    "membership": "membership.json",
-    "card_promo_incomplete": "card_promo_incomplete.json",  # deliberately missing data, for testing request_missing_data
-}
+from scenario_registry import SCENARIO_FILES as _SCENARIO_FILES
 
 
 def require_user(authorization: str | None = Header(default=None)) -> str:

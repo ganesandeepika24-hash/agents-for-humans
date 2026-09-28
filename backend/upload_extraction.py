@@ -50,7 +50,7 @@ _FIELD_SCHEMAS = {
 # Categories the classifier can choose from -- genuinely broader than
 # just our three original demo scenarios, matching the real-world
 # category breakdown discussed for this product.
-CATEGORIES = ["tariff", "trial", "card_promo", "insurance", "membership", "none"]
+CATEGORIES = ["tariff", "trial", "card_promo", "insurance", "membership", "switch_confirmation", "cancellation_confirmation", "none"]
 
 
 def classify_email(email_text: str) -> str:
@@ -64,6 +64,10 @@ def classify_email(email_text: str) -> str:
         f"- card_promo: credit card promotional/0%% rate ending\n"
         f"- insurance: insurance policy renewal\n"
         f"- membership: gym, streaming, or other recurring membership/subscription renewal\n"
+        f"- switch_confirmation: confirms the user has successfully switched to a NEW provider "
+        f"(e.g. 'Welcome to X', 'Your new account is active', a new provider's signup confirmation)\n"
+        f"- cancellation_confirmation: confirms a subscription/contract/membership has been "
+        f"successfully cancelled (e.g. 'Your cancellation is confirmed', 'Sorry to see you go')\n"
         f"- none: not relevant to any of the above\n\n"
         f"Respond with ONLY the single category word, nothing else.\n\n"
         f"Email:\n{email_text[:3000]}"
@@ -164,3 +168,25 @@ def infer_recurring_pattern(emails):
         return result if result.get("pattern_found") else None
     except json.JSONDecodeError:
         return None
+
+
+def extract_confirmation_provider(email_text: str) -> str | None:
+    """For a switch_confirmation or cancellation_confirmation email,
+    extracts which provider/service this confirmation is about, so it
+    can be matched back to the specific card waiting on it."""
+    prompt = (
+        "This email confirms either a successful provider switch or a "
+        "successful cancellation. Extract ONLY the name of the company/"
+        "provider/service this confirmation is about. Respond with just "
+        "the name, nothing else. If you cannot determine it, respond "
+        "with exactly: UNKNOWN\\n\\n"
+        f"Email:\\n{email_text[:3000]}"
+    )
+    client = boto3.client("bedrock-runtime", region_name="eu-central-1", config=_BOTO_CONFIG)
+    response = client.converse(
+        modelId=MODEL_ID,
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": 30, "temperature": 0},
+    )
+    result = response["output"]["message"]["content"][0]["text"].strip()
+    return None if result == "UNKNOWN" else result
