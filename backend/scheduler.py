@@ -28,6 +28,8 @@ from gmail_reader import fetch_recent_emails, extract_signal_from_email
 from cards import (
     record_notification, get_card_by_signal, reopen_signal,
     get_last_fingerprint, set_last_fingerprint,
+
+    get_all_active_signals_for_user, set_escalation_tier, mark_expired,
 )
 
 _paused = False
@@ -233,3 +235,96 @@ def start_scheduler():
     scheduler.start()
     print("[scheduler] Started — checking every 30 minutes.")
     return scheduler
+
+
+_KEY_DATE_FIELD_MAP = {
+    "tariff": "contract_end_date", "card_promo": "promo_apr_end_date",
+    "card_promo_incomplete": "promo_apr_end_date", "trial": "cancellation_deadline",
+    "insurance": "renewal_date", "membership": "renewal_date",
+}
+_PERIOD_START_FIELD_MAP = {
+    "tariff": "contract_start_date", "card_promo": "promo_apr_start_date",
+    "card_promo_incomplete": "promo_apr_start_date", "trial": "trial_start_date",
+    "insurance": "period_start_date", "membership": "period_start_date",
+}
+
+
+def run_time_driven_escalation_check():
+    """Runs on every scheduled pass, independent of whether any
+    underlying data has changed -- a countdown clock advances even
+    when nothing else does. For each active signal, computes the
+    current escalation tier from real dates, and either re-notifies
+    (tier advanced), marks it expired (deadline passed), or does
+    nothing (same tier as last time)."""
+    import sys
+    sys.path.insert(0, "/workspaces/agents-for-humans/AgentNick/app/AgentNick")
+    from tools.escalation_logic import compute_escalation_tier as check_escalation_tier_dict
+    from users import list_all_user_ids
+
+    today = date.today().isoformat()
+    user_ids = list_all_user_ids()
+
+    for user_id in user_ids:
+        active_signals = get_all_active_signals_for_user(user_id)
+
+        for signal in active_signals:
+            card = signal["card"]
+            scenario_type = card.get("scenario_type")
+            signal_id = signal["signal_id"]
+            last_tier = signal["last_escalation_tier"]
+            status = signal["status"]
+
+            if scenario_type not in _KEY_DATE_FIELD_MAP:
+                continue
+
+            raw_data = get_user_data(user_id, scenario_type)
+            if not raw_data:
+                continue
+
+            key_date_field = _KEY_DATE_FIELD_MAP[scenario_type]
+            period_start_field = _PERIOD_START_FIELD_MAP[scenario_type]
+            key_date = raw_data.get(key_date_field)
+            period_start = raw_data.get(period_start_field)
+            if not key_date or not period_start:
+                continue
+
+            # Deadline has passed -- mark expired, no more notifications
+            # either way. "Confirmed" detection is a separate, future
+            # piece (confirmation-email scanning); for now, expiry
+            # always lands in the unconfirmed (visible) state.
+            if key_date < today:
+                if status not in ("expired_confirmed", "expired_unconfirmed"):
+                    mark_expired(user_id, signal_id, confirmed=False)
+                continue
+
+            try:
+                result = check_escalation_tier_dict(
+                    period_start_date=period_start, key_date=key_date,
+                    as_of_date=today, last_shown_tier=last_tier,
+                )
+            except Exception as e:
+                print(f"[scheduler] Escalation check error for {user_id}/{signal_id}: {e}")
+                continue
+
+            if result["should_notify_now"]:
+                # Genuine tier advance -- re-evaluate with the agent so
+                # the numbers (days remaining, savings) are recalculated
+                # fresh, not just re-showing stale wording.
+                set_escalation_tier(user_id, signal_id, result["tier"])
+                try:
+                    eval_result = invoke_agent_for_check(
+                        scenario_type=scenario_type, raw_data=raw_data, as_of_date=today,
+                    )
+                    for new_card in eval_result.get("cards", []):
+                        new_card["scenario_type"] = scenario_type
+                        if new_card.get("signal_id") == signal_id:
+                            reopen_signal(user_id, signal_id, new_card)
+                            send_push_to_user(
+                                user_id, title=new_card["title"],
+                                body=(f"£{new_card['computed_savings_gbp']:.0f} potential impact"
+                                      if new_card.get("computed_savings_gbp") else "Tap to see details"),
+                                url=f"https://agentnick-finance-guard.lovable.app/?card={signal_id}",
+                                card_id=new_card.get("card_id"), signal_id=signal_id,
+                            )
+                except Exception as e:
+                    print(f"[scheduler] Escalation re-evaluation error for {user_id}/{signal_id}: {e}")
