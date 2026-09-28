@@ -8,9 +8,11 @@ real system actually processes.
 """
 
 import json
+from datetime import date
 from pathlib import Path
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
+_TODAY = date.today().isoformat()
 
 
 def _load(filename: str) -> dict:
@@ -24,7 +26,7 @@ SCENARIOS = [
         "description": "Real tariff data has comparison offers -- verify no OTHER company is invented beyond what's in the data.",
         "scenario_type": "tariff",
         "raw_data": _load("tariffs.json"),
-        "as_of_date": "2026-08-30",
+        "as_of_date": _TODAY,
         "assert_fn": "assert_no_real_bank_names_invented",
         "requires_agent": True,
     },
@@ -37,7 +39,7 @@ SCENARIOS = [
             "renewal_price_gbp": 46.0,
             "market_comparable_offers": [],
         },
-        "as_of_date": "2026-08-30",
+        "as_of_date": _TODAY,
         "assert_fn": "assert_trivial_change_correctly_handled",
         "requires_agent": True,
     },
@@ -46,7 +48,7 @@ SCENARIOS = [
         "description": "Same real tariff commitment must produce the same signal_id across repeated checks.",
         "scenario_type": "tariff",
         "raw_data": _load("tariffs.json"),
-        "as_of_date": "2026-08-30",
+        "as_of_date": _TODAY,
         "assert_fn": "assert_signal_id_stable_across_repeats",
         "requires_agent": False,
         "repeat_count": 3,
@@ -56,7 +58,7 @@ SCENARIOS = [
         "description": "A trial with a near-term cancellation deadline must produce an actionable card.",
         "scenario_type": "trial",
         "raw_data": _load("trial.json"),
-        "as_of_date": "2026-08-30",
+        "as_of_date": _TODAY,
         "assert_fn": "assert_card_produced",
         "requires_agent": True,
     },
@@ -71,7 +73,7 @@ SCENARIOS = [
                 "requires_upfront_payoff_gbp": 1250.0,
             }],
         },
-        "as_of_date": "2026-08-30",
+        "as_of_date": _TODAY,
         "assert_fn": "assert_affordability_mentioned",
         "requires_agent": True,
     },
@@ -80,7 +82,7 @@ SCENARIOS = [
         "description": "Deliberately incomplete card promo data must trigger a request-missing-data card, not a fabricated guess.",
         "scenario_type": "card_promo_incomplete",
         "raw_data": _load("card_promo_incomplete.json"),
-        "as_of_date": "2026-08-30",
+        "as_of_date": _TODAY,
         "assert_fn": "assert_card_produced",
         "requires_agent": True,
     },
@@ -89,7 +91,7 @@ SCENARIOS = [
         "description": "A real insurance renewal price jump must produce an actionable card.",
         "scenario_type": "insurance",
         "raw_data": _load("insurance.json"),
-        "as_of_date": "2026-08-30",
+        "as_of_date": _TODAY,
         "assert_fn": "assert_card_produced",
         "requires_agent": True,
     },
@@ -98,7 +100,7 @@ SCENARIOS = [
         "description": "A real membership renewal price jump must produce an actionable card.",
         "scenario_type": "membership",
         "raw_data": _load("membership.json"),
-        "as_of_date": "2026-08-30",
+        "as_of_date": _TODAY,
         "assert_fn": "assert_card_produced",
         "requires_agent": True,
     },
