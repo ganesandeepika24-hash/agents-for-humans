@@ -32,6 +32,7 @@ def _get_connection():
             card_json TEXT NOT NULL,
             first_notified_at TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'awaiting_response',
+            last_escalation_tier TEXT,
             PRIMARY KEY (user_id, signal_id)
         )
     """)
@@ -256,5 +257,49 @@ def get_card_status(user_id: str, signal_id: str) -> str | None:
             (user_id, signal_id),
         ).fetchone()
         return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def set_escalation_tier(user_id: str, signal_id: str, tier: str):
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "UPDATE notified_signals SET last_escalation_tier = ? WHERE user_id = ? AND signal_id = ?",
+            (tier, user_id, signal_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_escalation_tier(user_id: str, signal_id: str) -> str | None:
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT last_escalation_tier FROM notified_signals WHERE user_id = ? AND signal_id = ?",
+            (user_id, signal_id),
+        ).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def get_all_active_signals_for_user(user_id: str) -> list[dict]:
+    """Every signal not yet in a final state -- used by the time-driven
+    escalation check, which must consider cards regardless of whether
+    their underlying data has changed."""
+    conn = _get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT signal_id, card_json, status, last_escalation_tier FROM notified_signals "
+            "WHERE user_id = ? AND status NOT IN ('decided', 'expired_confirmed')",
+            (user_id,),
+        ).fetchall()
+        return [
+            {"signal_id": r[0], "card": json.loads(_fernet.decrypt(r[1].encode()).decode()),
+             "status": r[2], "last_escalation_tier": r[3]}
+            for r in rows
+        ]
     finally:
         conn.close()
