@@ -158,6 +158,81 @@ def test_push(user_id: str = Depends(require_user)):
     return {"status": "push_sent"}
 
 
+@app.post("/test-notify")
+def test_notify(user_id: str = Depends(require_user)):
+    """UI test button: seeds ONE fresh real card for a scenario type
+    the user doesn't already have an active card for -- via the same
+    enable_example_scenario mechanism the real "Try examples" button
+    uses -- runs it through the real agent evaluation (no fabricated
+    card), then sends a real push notification for whatever card that
+    genuinely produces. Lets the full new-card + push pipeline be
+    proven end-to-end from the UI alone, no terminal involved."""
+    import random
+
+    existing_pending = get_pending_cards_for_user(user_id)
+    existing_types = {c.get("scenario_type") for c in existing_pending}
+    available_types = [s for s in _SCENARIO_FILES if s not in existing_types]
+
+    if not available_types:
+        if existing_pending:
+            card = existing_pending[0]
+            send_push_to_user(
+                user_id,
+                title=card["title"],
+                body=(f"£{card['computed_savings_gbp']:.0f} potential impact"
+                      if card.get("computed_savings_gbp") else "Tap to see details"),
+                url=f"https://agentnick-finance-guard.lovable.app/?card={card['signal_id']}",
+                card_id=card.get("card_id"),
+                signal_id=card["signal_id"],
+            )
+            return {"status": "push_sent", "note": "every scenario type already has an active card; re-sent an existing one"}
+        raise HTTPException(status_code=400, detail="No scenario types available to seed")
+
+    scenario_type = random.choice(available_types)
+    raw_data = enable_example_scenario(user_id, scenario_type)
+
+    user_threshold = get_threshold(user_id)
+    result = invoke_agent_for_check(
+        scenario_type=scenario_type,
+        raw_data=raw_data,
+        as_of_date=date.today().isoformat(),
+        threshold_min_gbp=user_threshold.get("min_gbp"),
+        threshold_min_pct=user_threshold.get("min_pct"),
+    )
+
+    new_card = None
+    for card in result.get("cards", []):
+        card["scenario_type"] = scenario_type
+        signal_id = card.get("signal_id")
+        if not signal_id:
+            continue
+        existing = get_card_by_signal(user_id, signal_id)
+        if existing is None:
+            record_notification(user_id, signal_id, card)
+            new_card = card
+            break
+        elif new_card is None:
+            new_card = existing
+
+    set_last_fingerprint(user_id, scenario_type, _compute_data_fingerprint(raw_data))
+
+    if new_card is None:
+        return {"status": "no_card_generated", "scenario_type": scenario_type,
+                "note": "Real agent evaluation ran but decided no card was warranted for this data."}
+
+    send_push_to_user(
+        user_id,
+        title=new_card["title"],
+        body=(f"£{new_card['computed_savings_gbp']:.0f} potential impact"
+              if new_card.get("computed_savings_gbp") else "Tap to see details"),
+        url=f"https://agentnick-finance-guard.lovable.app/?card={new_card['signal_id']}",
+        card_id=new_card.get("card_id"),
+        signal_id=new_card["signal_id"],
+    )
+    return {"status": "card_created_and_pushed", "scenario_type": scenario_type, "card": new_card}
+
+
+
 class ApproveRequest(BaseModel):
     signal_id: str
     option_label: str
